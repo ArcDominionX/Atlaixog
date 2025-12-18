@@ -218,16 +218,16 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 {tokenChange}
                             </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-6 mt-4 text-right">
-                            <div className="flex flex-col items-end">
+                        <div className="flex flex-wrap justify-start md:justify-end gap-x-6 gap-y-4 mt-4 text-right">
+                            <div className="flex flex-col items-end min-w-[80px]">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Market Cap</span>
                                 <span className="text-sm font-bold text-text-light">$410.2B</span>
                             </div>
-                            <div className="flex flex-col items-end">
+                            <div className="flex flex-col items-end min-w-[80px]">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Liquidity</span>
                                 <span className="text-sm font-bold text-text-light">$482.6M</span>
                             </div>
-                            <div className="flex flex-col items-end">
+                            <div className="flex flex-col items-end min-w-[80px]">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Volume (24h)</span>
                                 <span className="text-sm font-bold text-text-light">$670M</span>
                             </div>
@@ -264,10 +264,10 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* Main Token Stats Section (Updated) */}
+                    {/* Main Token Stats Section (Updated: Mobile 3-col, Desktop Dynamic Auto-Fit) */}
                     <div>
                         <h3 className="text-lg font-bold mb-4 text-text-light">Token Stats</h3>
-                        <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
                             {[
                                 { l: 'Txns (24h)', v: '38,214', c: 'text-text-light' },
                                 { l: 'Wallets', v: '12,940', c: 'text-text-light' },
@@ -276,18 +276,18 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
                                 { l: 'Liq Pools', v: '128', c: 'text-text-light' }
                             ].map((stat, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center">
-                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide truncate">{stat.l}</div>
+                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
+                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
                                     <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    {/* Token Performance (Updated) */}
+                    {/* Token Performance (Updated: Mobile 3-col, Desktop Dynamic Auto-Fit) */}
                     <div>
                         <h3 className="text-lg font-bold mb-4 text-text-light">Performance</h3>
-                        <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
                             {[
                                 { label: '30M', val: '-0.45%', pos: false },
                                 { label: '1H', val: '-16.08%', pos: false },
@@ -296,8 +296,8 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 { label: '1W', val: '+12.40%', pos: true },
                                 { label: '1M', val: '+145.2%', pos: true },
                             ].map((item, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center">
-                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide truncate">{item.label}</div>
+                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
+                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{item.label}</div>
                                     <div className={`text-sm md:text-lg font-bold ${item.pos ? 'text-primary-green' : 'text-primary-red'}`}>
                                         {item.val}
                                     </div>
@@ -306,7 +306,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* On-Chain Activity (Updated: Removed rectangle, added See More) */}
+                    {/* On-Chain Activity */}
                     <div className="bg-card border border-border rounded-xl p-6">
                         <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
                         <div className="flex flex-col">
@@ -330,7 +330,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </button>
                     </div>
 
-                    {/* Wallet Interactions Table (Updated: Only Buy/Sell, spacing, fonts) */}
+                    {/* Wallet Interactions Table */}
                     <div className="bg-card border border-border rounded-xl p-6">
                         <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
                         <div className="overflow-x-auto">
