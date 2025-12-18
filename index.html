@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Atlaix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        main: '#111315',
+                        sidebar: '#16181A',
+                        card: '#1C1F22',
+                        'card-hover': '#222529',
+                        primary: {
+                            green: '#26D356',
+                            'green-light': '#2AF598',
+                            yellow: '#F2C94C',
+                            purple: '#9B51E0',
+                            red: '#EB5757',
+                            blue: '#2F80ED'
+                        },
+                        text: {
+                            light: '#EAECEF',
+                            medium: '#8F96A3',
+                            dark: '#6C727A'
+                        },
+                        border: '#2A2E33'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom": "https://esm.sh/react-dom@18.2.0?deps=react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0",
+        "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime?deps=react@18.2.0",
+        "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0"
+      }
+    }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #111315;
+            --bg-sidebar: #16181A;
+            --bg-card: #1C1F22;
+            --bg-card-hover: #222529;
+            --bg-overlay: rgba(17, 19, 21, 0.85);
+            --primary-green: #26D356;
+            --primary-green-light: #2AF598;
+            --primary-green-dark-bg: #1B3D28;
+            --primary-green-darker: #1fa845;
+            --primary-yellow: #F2C94C;
+            --primary-yellow-darker: #d9b443;
+            --primary-purple: #9B51E0;
+            --primary-purple-darker: #8244bb;
+            --primary-purple-dark-bg: rgba(155, 81, 224, 0.1);
+            --primary-red: #EB5757;
+            --primary-red-dark-bg: rgba(235, 87, 87, 0.1);
+            --primary-blue: #2F80ED;
+            --text-light: #EAECEF;
+            --text-medium: #8F96A3;
+            --text-dark: #6C727A;
+            --border-color: #2A2E33;
+            --border-radius-sm: 8px;
+            --border-radius-md: 12px;
+            --border-radius-lg: 16px;
+        }
+
+        html { font-size: 16px; } 
+        body { font-size: 0.9375rem; } 
+
+        /* High-visibility horizontal scrollbar */
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #3a3f42 transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px !important;
+            display: block !important;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border-radius: 10px !important;
+            margin: 0 20px !important;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4a4f52 !important;
+            border-radius: 10px !important;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .btn { padding: 0.75rem 1.5rem; border-radius: var(--border-radius-sm); font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.65rem; }
+        .btn-green { background-color: var(--primary-green); color: var(--bg-main); }
+        .btn-green:hover { background-color: var(--primary-green-darker); }
+        .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-medium); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        .btn-outline:hover { border-color: var(--text-light); color: var(--text-light); }
+        
+        .card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 1.5rem; max-width: 100%; display: flex; flex-direction: column; overflow: visible; }
+        .card-title { display: flex; align-items: center; gap: 0.75rem; font-size: 1.125rem; font-weight: 600; margin-bottom: 1.5rem; }
+
+        .filter-pill { 
+            background: transparent; 
+            border: 1px solid var(--border-color); 
+            border-radius: 50px; 
+            padding: 0.35rem 0.8rem;
+            color: var(--text-medium); 
+            font-size: 0.8rem; 
+            font-weight: 500; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 0.4rem; 
+            transition: all 0.2s; 
+            position: relative; 
+            white-space: nowrap;
+        }
+        .filter-pill:hover, .filter-pill.active { border-color: var(--text-light); color: var(--text-light); background: var(--bg-card-hover); }
+        
+        .filter-popup { 
+            position: absolute; 
+            top: calc(100% + 12px); 
+            left: 0; 
+            background: #1C1F22; 
+            border: 1px solid var(--border-color); 
+            border-radius: var(--border-radius-md); 
+            padding: 1rem; 
+            z-index: 500; 
+            box-shadow: 0 15px 40px rgba(0,0,0,0.7); 
+            width: max-content; 
+            min-width: 100%; 
+            white-space: nowrap; 
+            animation: fadeIn 0.2s ease; 
+        }
+        .filter-popup.complex { width: 280px; min-width: 280px; white-space: normal; }
+        .filter-list-item { padding: 0.5rem; border-radius: 4px; cursor: pointer; transition: background 0.2s; font-size: 0.9rem; display: flex; justify-content: space-between; }
+        .filter-list-item:hover { background: var(--bg-card-hover); color: var(--text-light); }
+        .filter-list-item.selected { color: var(--primary-green); font-weight: 600; }
+
+        /* Data Table Styles - Desktop Default */
+        .data-table { width: 100%; border-collapse: separate; border-spacing: 0; white-space: nowrap; }
+        .data-table th, .data-table td { padding: 0.75rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .data-table th { color: var(--text-dark); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-card); height: 44px; }
+        .data-table td { color: var(--text-light); font-weight: 500; font-size: 0.9rem; vertical-align: middle; height: 56px; }
+        
+        /* Mobile Optimizations - Only affects table */
+        @media (max-width: 768px) {
+            .data-table th, .data-table td { padding: 0.5rem 0.35rem; }
+            .data-table th { font-size: 0.7rem; height: 40px; }
+            .data-table td { font-size: 0.8rem; height: 50px; }
+            .card { padding: 1rem; }
+        }
+        
+        .sticky-col { 
+            position: sticky !important; 
+            left: 0; 
+            background: var(--bg-card) !important; 
+            z-index: 10 !important; 
+            box-shadow: 4px 0 10px -2px rgba(0,0,0,0.5);
+        }
+        th.sticky-col { z-index: 20 !important; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-main text-text-light font-sans antialiased overflow-hidden">
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+</body>
+</html>
