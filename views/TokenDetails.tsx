@@ -210,7 +210,27 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 
                 {/* Left Column */}
                 <div className="flex flex-col gap-6">
-                    {/* Standard Chart Section (Reverted) */}
+                    {/* Main Token Stats Section (Moved Up) */}
+                    <div>
+                        <h3 className="text-lg font-bold mb-4 text-text-light">Token Stats</h3>
+                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
+                            {[
+                                { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' }, 
+                                { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
+                                { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
+                                { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
+                                { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
+                                { l: 'Liq Pools', v: '128', c: 'text-text-light' }
+                            ].map((stat, i) => (
+                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
+                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
+                                    <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Standard Chart Section (Reverted & Moved Down) */}
                     <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
                         <div className="flex justify-between items-center p-3 border-b border-border bg-[#16181a]">
                             <div className="flex gap-1">
@@ -230,26 +250,6 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                         <div className="w-full h-[500px] relative">
                             <div ref={chartRef} className="w-full h-full"></div>
-                        </div>
-                    </div>
-
-                    {/* Main Token Stats Section (Updated Renaming) */}
-                    <div>
-                        <h3 className="text-lg font-bold mb-4 text-text-light">Token Stats</h3>
-                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
-                            {[
-                                { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' }, // Updated label
-                                { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
-                                { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
-                                { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
-                                { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
-                                { l: 'Liq Pools', v: '128', c: 'text-text-light' }
-                            ].map((stat, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
-                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
-                                    <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
-                                </div>
-                            ))}
                         </div>
                     </div>
 
