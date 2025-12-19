@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Globe, Twitter, Send, ShieldCheck, Activity, Lock, ChevronDown, ExternalLink, Scan, Zap, Wallet, Bell, BarChart2, Settings, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Copy, Globe, Twitter, Send, ShieldCheck, Activity, Lock, ChevronDown, ExternalLink, Scan, Zap, Wallet, Bell, BarChart2, Settings, Maximize2, Radar } from 'lucide-react';
 import { MarketCoin } from '../types';
 
 // Declare ApexCharts
@@ -13,8 +13,6 @@ interface TokenDetailsProps {
 export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartInstance = useRef<any>(null);
-    const holderChartRef = useRef<HTMLDivElement>(null);
-    const holderChartInstance = useRef<any>(null);
     const [timeframe, setTimeframe] = useState('15m');
     const [copied, setCopied] = useState(false);
 
@@ -120,58 +118,6 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         }
         return () => { if (chartInstance.current) chartInstance.current.destroy(); };
     }, [timeframe]);
-
-    // Holders Pie Chart Initialization
-    useEffect(() => {
-        if (holderChartRef.current && typeof ApexCharts !== 'undefined') {
-            const options = {
-                series: [5, 20, 75],
-                labels: ['Developer', 'Top 10 Holders', 'Rest of Holders'],
-                chart: {
-                    type: 'donut',
-                    height: 250,
-                    background: 'transparent'
-                },
-                colors: ['#EB5757', '#F2C94C', '#2F80ED'],
-                stroke: { show: false },
-                dataLabels: { enabled: false },
-                legend: {
-                    position: 'bottom',
-                    labels: { colors: '#EAECEF', fontFamily: 'Inter' },
-                    itemMargin: { horizontal: 10, vertical: 5 },
-                    markers: {
-                        width: 10,
-                        height: 10,
-                        strokeWidth: 0,
-                        radius: 10
-                    }
-                },
-                plotOptions: {
-                    pie: {
-                        donut: {
-                            size: '70%',
-                            labels: {
-                                show: true,
-                                name: { color: '#8F96A3', fontSize: '12px' },
-                                value: { color: '#EAECEF', fontSize: '16px', fontWeight: 700 },
-                                total: {
-                                    show: true,
-                                    label: 'Holders',
-                                    color: '#8F96A3',
-                                    formatter: () => '1.4K'
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-
-            if (holderChartInstance.current) holderChartInstance.current.destroy();
-            holderChartInstance.current = new ApexCharts(holderChartRef.current, options);
-            holderChartInstance.current.render();
-        }
-        return () => { if (holderChartInstance.current) holderChartInstance.current.destroy(); };
-    }, []);
 
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
@@ -396,11 +342,11 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         <div className="p-4 grid grid-cols-2 gap-3">
                             <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
                                 <Scan size={20} className="text-text-medium group-hover:text-primary-green transition-colors" />
-                                <span className="text-xs font-bold text-text-light">Quick Scan</span>
+                                <span className="text-xs font-bold text-text-light">Risk Scan</span>
                             </button>
                             <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
-                                <Zap size={20} className="text-text-medium group-hover:text-primary-yellow transition-colors" />
-                                <span className="text-xs font-bold text-text-light">Smart Money</span>
+                                <Radar size={20} className="text-text-medium group-hover:text-primary-yellow transition-colors" />
+                                <span className="text-xs font-bold text-text-light">Detection</span>
                             </button>
                             <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
                                 <Wallet size={20} className="text-text-medium group-hover:text-primary-blue transition-colors" />
@@ -408,16 +354,8 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                             </button>
                             <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
                                 <Bell size={20} className="text-text-medium group-hover:text-primary-red transition-colors" />
-                                <span className="text-xs font-bold text-text-light">Smart Alert</span>
+                                <span className="text-xs font-bold text-text-light">Set Alert</span>
                             </button>
-                        </div>
-                    </div>
-
-                    {/* Token Holders */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <h3 className="font-bold text-sm text-text-medium uppercase tracking-wide mb-2">Token Holders</h3>
-                        <div className="relative w-full h-[250px]">
-                            <div ref={holderChartRef} className="w-full h-full"></div>
                         </div>
                     </div>
 
