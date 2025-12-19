@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Globe, Twitter, Send, ShieldCheck, Activity, Lock, ChevronDown, ExternalLink, Scan, Zap, Wallet, Bell } from 'lucide-react';
+import { ArrowLeft, Copy, Globe, Twitter, Send, ShieldCheck, Activity, Lock, ChevronDown, ExternalLink, Scan, Zap, Wallet, Bell, BarChart2, Settings, Maximize2 } from 'lucide-react';
 import { MarketCoin } from '../types';
 
 // Declare ApexCharts
@@ -32,7 +32,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Main Candle Chart Initialization
+    // Main Candle Chart Initialization (Reverted to Standard Style)
     useEffect(() => {
         if (chartRef.current && typeof ApexCharts !== 'undefined') {
             let data = [];
@@ -180,8 +180,8 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 <ArrowLeft size={18} /> Back to Market
             </button>
 
-            {/* 2. Top Section (Improved Layout & Adjusted Sizes) */}
-            <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+            {/* 2. Top Section */}
+            <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-6">
                 <div className="flex flex-col md:flex-row justify-between gap-6">
                     {/* Left: Identity */}
                     <div className="flex gap-4 md:gap-5">
@@ -210,27 +210,50 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* Right: Price & Key Stats (Adjusted Sizes) */}
-                    <div className="flex flex-col items-start md:items-end justify-center">
+                    {/* Right: Price, Stats & Performance (Organized vertically) */}
+                    <div className="flex flex-col items-start md:items-end justify-center w-full md:w-auto gap-4">
+                        
+                        {/* 1. Price Header */}
                         <div className="flex items-baseline gap-3">
                             <div className="text-3xl md:text-4xl font-extrabold text-text-light tracking-tight">{tokenPrice}</div>
                             <div className={`text-base md:text-lg font-bold px-2 py-0.5 rounded ${isPositive ? 'text-primary-green bg-primary-green/10' : 'text-primary-red bg-primary-red/10'}`}>
                                 {tokenChange}
                             </div>
                         </div>
-                        <div className="flex flex-wrap justify-start md:justify-end gap-x-6 gap-y-4 mt-4 text-right">
-                            <div className="flex flex-col items-end min-w-[80px]">
+                        
+                        {/* 2. Key Market Stats */}
+                        <div className="flex flex-wrap justify-start md:justify-end gap-x-8 gap-y-2 w-full">
+                            <div className="flex flex-col items-start md:items-end">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Market Cap</span>
                                 <span className="text-sm font-bold text-text-light">$410.2B</span>
                             </div>
-                            <div className="flex flex-col items-end min-w-[80px]">
+                            <div className="flex flex-col items-start md:items-end">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Liquidity</span>
                                 <span className="text-sm font-bold text-text-light">$482.6M</span>
                             </div>
-                            <div className="flex flex-col items-end min-w-[80px]">
+                            <div className="flex flex-col items-start md:items-end">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Volume (24h)</span>
                                 <span className="text-sm font-bold text-text-light">$670M</span>
                             </div>
+                        </div>
+
+                        {/* 3. Performance Metrics (Row below Stats) */}
+                        <div className="flex flex-wrap justify-start md:justify-end gap-2 w-full">
+                            {[
+                                { label: '30M', val: '-0.45%', pos: false },
+                                { label: '1H', val: '-16.0%', pos: false },
+                                { label: '6H', val: '-5.3%', pos: false },
+                                { label: '24H', val: '+22.3%', pos: true },
+                                { label: '7D', val: '+12.4%', pos: true },
+                                { label: '30D', val: '+145%', pos: true },
+                            ].map((item, i) => (
+                                <div key={i} className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm`}>
+                                    <span className="text-[9px] font-bold text-text-medium uppercase tracking-wider leading-none mb-1">{item.label}</span>
+                                    <span className={`text-xs font-bold leading-none ${item.pos ? 'text-primary-green' : 'text-primary-red'}`}>
+                                        {item.val}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -241,7 +264,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 
                 {/* Left Column */}
                 <div className="flex flex-col gap-6">
-                    {/* Chart Section */}
+                    {/* Standard Chart Section (Reverted) */}
                     <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
                         <div className="flex justify-between items-center p-3 border-b border-border bg-[#16181a]">
                             <div className="flex gap-1">
@@ -264,13 +287,13 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* Main Token Stats Section (Updated: Mobile 3-col, Desktop Dynamic Auto-Fit) */}
+                    {/* Main Token Stats Section (Updated Renaming) */}
                     <div>
                         <h3 className="text-lg font-bold mb-4 text-text-light">Token Stats</h3>
                         <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
                             {[
-                                { l: 'Txns (24h)', v: '38,214', c: 'text-text-light' },
-                                { l: 'Wallets', v: '12,940', c: 'text-text-light' },
+                                { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' }, // Updated label
+                                { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
                                 { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
                                 { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
                                 { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
@@ -284,129 +307,88 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* Token Performance (Updated: Mobile 3-col, Desktop Dynamic Auto-Fit) */}
-                    <div>
-                        <h3 className="text-lg font-bold mb-4 text-text-light">Performance</h3>
-                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
-                            {[
-                                { label: '30M', val: '-0.45%', pos: false },
-                                { label: '1H', val: '-16.08%', pos: false },
-                                { label: '6H', val: '-57.31%', pos: false },
-                                { label: '24H', val: '+22.35%', pos: true },
-                                { label: '1W', val: '+12.40%', pos: true },
-                                { label: '1M', val: '+145.2%', pos: true },
-                            ].map((item, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
-                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{item.label}</div>
-                                    <div className={`text-sm md:text-lg font-bold ${item.pos ? 'text-primary-green' : 'text-primary-red'}`}>
-                                        {item.val}
+                    {/* Container for Activity & Wallets (Responsive Layout: Stacked on Mobile/Tablet, Side-by-Side on Desktop) */}
+                    <div className="flex flex-col xl:flex-row gap-6 w-full">
+                        {/* On-Chain Activity */}
+                        <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
+                            <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
+                            <div className="flex flex-col flex-grow">
+                                {[
+                                    { type: 'Liquidity Added', val: '+$12.4M', desc: 'added to Uniswap V3', time: '2h ago', color: 'text-primary-green' },
+                                    { type: 'Large Transaction', val: '3,200 ETH', desc: 'transferred from 0x9f...32a', time: '4h ago', color: 'text-primary-blue' },
+                                    { type: 'Liquidity Removed', val: '-$3.1M', desc: 'withdrawn from SushiSwap', time: '6h ago', color: 'text-primary-red' },
+                                    { type: 'Transaction Spike', val: 'Surge', desc: 'in transactions detected', time: '8h ago', color: 'text-primary-purple' },
+                                    { type: 'Large Buy', val: '500 ETH', desc: 'bought by Whale 0x3a', time: '9h ago', color: 'text-primary-green' },
+                                ].map((item, i) => (
+                                    <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
+                                        <div>
+                                            <div className={`font-bold text-sm ${item.color} mb-0.5`}>{item.type}</div>
+                                            <div className="text-xs text-text-medium"><span className="font-bold text-text-light">{item.val}</span> {item.desc}</div>
+                                        </div>
+                                        <div className="text-xs text-text-dark font-mono font-medium whitespace-nowrap ml-2">{item.time}</div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                            <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
+                                See More Activity
+                            </button>
                         </div>
-                    </div>
 
-                    {/* On-Chain Activity */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
-                        <div className="flex flex-col">
-                            {[
-                                { type: 'Liquidity Added', val: '+$12.4M', desc: 'added to Uniswap V3', time: '2h ago', color: 'text-primary-green' },
-                                { type: 'Large Transaction', val: '3,200 ETH', desc: 'transferred from 0x9f...32a', time: '4h ago', color: 'text-primary-blue' },
-                                { type: 'Liquidity Removed', val: '-$3.1M', desc: 'withdrawn from SushiSwap', time: '6h ago', color: 'text-primary-red' },
-                                { type: 'Transaction Spike', val: 'Surge', desc: 'in transactions detected', time: '8h ago', color: 'text-primary-purple' },
-                            ].map((item, i) => (
-                                <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
-                                    <div>
-                                        <div className={`font-bold text-sm ${item.color} mb-0.5`}>{item.type}</div>
-                                        <div className="text-xs text-text-medium"><span className="font-bold text-text-light">{item.val}</span> {item.desc}</div>
-                                    </div>
-                                    <div className="text-xs text-text-dark font-mono font-medium">{item.time}</div>
-                                </div>
-                            ))}
-                        </div>
-                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                            See More Activity
-                        </button>
-                    </div>
-
-                    {/* Wallet Interactions Table */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="text-left text-xs text-text-dark uppercase tracking-wider border-b border-border">
-                                        <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
-                                        <th className="pb-4 font-bold w-[20%]">Amount</th>
-                                        <th className="pb-4 font-bold w-[15%]">Time</th>
-                                        <th className="pb-4 font-bold w-[30%]">Wallet</th>
-                                        <th className="pb-4 text-right pr-2 font-bold w-[20%]">Options</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {[
-                                        { w: '0x9f...32a', a: 'Buy', amt: '1,200 ETH', t: '4h ago', type: 'buy' },
-                                        { w: '0x4b...91c', a: 'Sell', amt: '800 ETH', t: '5h ago', type: 'sell' },
-                                        { w: '0x1c...99b', a: 'Buy', amt: '450 ETH', t: '8h ago', type: 'buy' },
-                                        { w: '0x7d...a44', a: 'Sell', amt: '1,500 ETH', t: '9h ago', type: 'sell' },
-                                        { w: '0x3a...11f', a: 'Buy', amt: '200 ETH', t: '11h ago', type: 'buy' },
-                                    ].map((row, i) => (
-                                        <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/40 transition-colors">
-                                            <td className="py-5 pl-2">
-                                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
-                                                    row.type === 'buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
-                                                }`}>
-                                                    {row.a}
-                                                </span>
-                                            </td>
-                                            <td className="py-5 font-bold text-text-light text-xs">{row.amt}</td>
-                                            <td className="py-5 text-text-medium font-medium text-xs">{row.t}</td>
-                                            <td className="py-5 font-mono text-primary-blue cursor-pointer hover:underline text-xs">{row.w}</td>
-                                            <td className="py-5 text-right pr-2">
-                                                <div className="flex gap-2 justify-end">
-                                                    <button className="px-3 py-1.5 bg-transparent border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">View</button>
-                                                    <button className="px-3 py-1.5 bg-primary-green/10 border border-primary-green/30 text-primary-green text-[10px] font-bold rounded hover:bg-primary-green hover:text-main transition-all uppercase">Track</button>
-                                                </div>
-                                            </td>
+                        {/* Wallet Interactions Table */}
+                        <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
+                            <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
+                            <div className="overflow-x-auto flex-grow custom-scrollbar pb-2">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-xs text-text-dark uppercase tracking-wider border-b border-border">
+                                            <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
+                                            <th className="pb-4 font-bold w-[20%]">Amount</th>
+                                            <th className="pb-4 font-bold w-[15%]">Time</th>
+                                            <th className="pb-4 font-bold w-[30%]">Wallet</th>
+                                            <th className="pb-4 text-right pr-2 font-bold w-[20%]">Options</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {[
+                                            { w: '0x9f...32a', a: 'Buy', amt: '1,200 ETH', t: '4h ago', type: 'buy' },
+                                            { w: '0x4b...91c', a: 'Sell', amt: '800 ETH', t: '5h ago', type: 'sell' },
+                                            { w: '0x1c...99b', a: 'Buy', amt: '450 ETH', t: '8h ago', type: 'buy' },
+                                            { w: '0x7d...a44', a: 'Sell', amt: '1,500 ETH', t: '9h ago', type: 'sell' },
+                                            { w: '0x3a...11f', a: 'Buy', amt: '200 ETH', t: '11h ago', type: 'buy' },
+                                        ].map((row, i) => (
+                                            <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/40 transition-colors">
+                                                <td className="py-5 pl-2">
+                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
+                                                        row.type === 'buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
+                                                    }`}>
+                                                        {row.a}
+                                                    </span>
+                                                </td>
+                                                <td className="py-5 font-bold text-text-light text-xs">{row.amt}</td>
+                                                <td className="py-5 text-text-medium font-medium text-xs whitespace-nowrap">{row.t}</td>
+                                                <td className="py-5 font-mono text-primary-blue cursor-pointer hover:underline text-xs">{row.w}</td>
+                                                <td className="py-5 text-right pr-2">
+                                                    <div className="flex gap-2 justify-end">
+                                                        <button className="px-2 py-1 bg-transparent border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">View</button>
+                                                        <button className="px-2 py-1 bg-primary-green/10 border border-primary-green/30 text-primary-green text-[10px] font-bold rounded hover:bg-primary-green hover:text-main transition-all uppercase">Track</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
+                                See More Interactions
+                            </button>
                         </div>
-                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                            See More Interactions
-                        </button>
                     </div>
                 </div>
 
                 {/* Right Column: Sidebar Info */}
                 <div className="flex flex-col gap-6">
                     
-                    {/* Security Score */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <div className="flex justify-between items-start mb-4">
-                            <h3 className="font-bold text-sm text-text-medium uppercase tracking-wide">Risk Score</h3>
-                            <div className="bg-primary-green/10 text-primary-green p-1.5 rounded-lg"><ShieldCheck size={18} /></div>
-                        </div>
-                        <div className="flex items-end gap-2 mb-3">
-                            <span className="text-4xl font-extrabold text-primary-green leading-none">95</span>
-                            <span className="text-lg font-bold text-text-medium mb-1">/100</span>
-                        </div>
-                        <div className="w-full bg-border h-2 rounded-full overflow-hidden mb-5">
-                            <div className="h-full bg-primary-green w-[95%] shadow-[0_0_10px_rgba(38,211,86,0.5)]"></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-xs font-medium">
-                            <div className="bg-main border border-border p-2.5 rounded-lg flex items-center gap-2 text-text-light">
-                                <Lock size={14} className="text-primary-green" /> Mint Disabled
-                            </div>
-                            <div className="bg-main border border-border p-2.5 rounded-lg flex items-center gap-2 text-text-light">
-                                <Activity size={14} className="text-primary-green" /> Mutable: No
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Quick Actions (Replaced Token Stats) */}
+                    {/* Quick Actions */}
                     <div className="bg-card border border-border rounded-xl overflow-hidden">
                         <div className="p-4 border-b border-border bg-card-hover/30">
                             <h3 className="font-bold text-base">Quick Actions</h3>
@@ -431,15 +413,11 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    {/* Token Holders (Updated) */}
+                    {/* Token Holders */}
                     <div className="bg-card border border-border rounded-xl p-6">
                         <h3 className="font-bold text-sm text-text-medium uppercase tracking-wide mb-2">Token Holders</h3>
                         <div className="relative w-full h-[250px]">
                             <div ref={holderChartRef} className="w-full h-full"></div>
-                            {/* Center Text for Donut */}
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none mt-[-10px]">
-                                {/* ApexCharts handles this via plotOptions, but custom HTML is often sharper. Left standard for now. */}
-                            </div>
                         </div>
                     </div>
 

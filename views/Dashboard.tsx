@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, ArrowUp, ArrowDown, Plus, Search, ChevronRight } from 'lucide-react';
+import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, ArrowUp, ArrowDown, Plus, Search, ChevronRight, Settings } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DualRangeSlider } from '../components/DualRangeSlider';
 
@@ -24,7 +24,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
-    const [timeFrame, setTimeFrame] = useState('1h');
+    const [timeFrame, setTimeFrame] = useState('12H');
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [mcapMin, setMcapMin] = useState(2);
@@ -89,7 +89,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
         };
     }, [activeFilter]);
 
-    const getChange = (coin: MarketCoin) => { if (timeFrame === '24h') return coin.h24; if (timeFrame === '7d') return coin.d7; return coin.h1; };
+    const getChange = (coin: MarketCoin) => { 
+        // Helper to parse percentage string
+        const parseVal = (str: string) => parseFloat(str.replace('%', '').replace('+', ''));
+        const formatVal = (num: number) => (num > 0 ? '+' : '') + num.toFixed(2) + '%';
+        
+        const h1 = parseVal(coin.h1);
+        const h24 = parseVal(coin.h24);
+        const d7 = parseVal(coin.d7);
+
+        switch(timeFrame) {
+            case 'All': return formatVal(d7 * 12.5); // Mock All time
+            case '1H': return coin.h1;
+            case '6H': return formatVal(h24 * 0.25); // Simulated data
+            case '12H': return formatVal(h24 * 0.5); // Simulated data
+            case '1D': return coin.h24;
+            case '1W': return coin.d7;
+            default: return coin.h24;
+        }
+    };
+
     const getPercentColor = (val: string) => val.includes('-') ? 'text-primary-red' : 'text-primary-green';
 
     const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
@@ -138,7 +157,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
 
             {/* 2. Live Market Data (Now below Search) */}
             <div className="bg-card border border-border rounded-xl p-3 md:p-5 overflow-visible shadow-sm relative z-30">
-                <h3 className="font-bold text-lg mb-4">Live Market Data</h3>
+                <div className="flex flex-col gap-3 mb-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-lg">Live Market Data</h3>
+                    </div>
+                    
+                    {/* Timeframe Filter - Styled like Pills, Right Aligned, New Row */}
+                    <div className="flex flex-wrap justify-end gap-2 w-full">
+                        {['All', '1H', '6H', '12H', '1D', '1W'].map((tf) => (
+                            <button 
+                                key={tf}
+                                onClick={() => setTimeFrame(tf)}
+                                className={`
+                                    px-4 py-1.5 text-xs font-semibold rounded-full border transition-all whitespace-nowrap
+                                    ${timeFrame === tf 
+                                        ? 'bg-card-hover border-text-light text-text-light' 
+                                        : 'bg-transparent border-border text-text-medium hover:border-text-medium hover:text-text-light'
+                                    }
+                                `}
+                            >
+                                {tf}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 
                 {/* Filters */}
                 <div className="mb-4 relative">
@@ -275,18 +317,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                                 <th className="sticky-col" style={{minWidth: '135px'}}>Chain / Token <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
                                 <th>Price <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
                                 <th style={{width: '90px'}}>
-                                    <div className="relative inline-flex items-center gap-1 cursor-pointer hover:text-text-light" onClick={() => setDropdownOpen(!dropdownOpen)}>
-                                        {timeFrame} <ChevronDown size={12} />
-                                        {dropdownOpen && (
-                                            <div className="absolute top-full right-0 bg-card border border-border rounded-lg p-1 z-50 min-w-[90px] shadow-2xl">
-                                                {['1h', '24h', '7d'].map(tf => (
-                                                    <div key={tf} className={`px-2 py-1.5 text-xs text-text-medium hover:bg-card-hover hover:text-text-light rounded cursor-pointer ${timeFrame === tf ? 'text-primary-green font-bold' : ''}`} onClick={(e) => { e.stopPropagation(); setTimeFrame(tf); setDropdownOpen(false); }}>
-                                                        {tf} %
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    Chg {timeFrame} <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div>
                                 </th>
                                 <th>MCap <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
                                 <th>DEX Buys</th>

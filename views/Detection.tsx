@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Activity, Zap, ShieldAlert, Trash2, Rocket, Wallet, ChevronDown, TrendingUp, Radar, Crosshair, FolderKanban, Calendar as CalendarIcon, X } from 'lucide-react';
+import { Search, Activity, Zap, ShieldAlert, Trash2, Rocket, Wallet, ChevronDown, TrendingUp, Radar, Crosshair, FolderKanban, Calendar as CalendarIcon, X, AlertTriangle } from 'lucide-react';
 import { CustomCalendar } from '../components/CustomCalendar';
 
 // Declare ApexCharts
@@ -17,6 +17,7 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
     // Filter States
     const [feedChain, setFeedChain] = useState('All Chains');
     const [eventType, setEventType] = useState('All Events');
+    const [severity, setSeverity] = useState('All Severity');
 
     // Date Range Modal States
     const [showDateRangeModal, setShowDateRangeModal] = useState(false);
@@ -140,34 +141,26 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
     ];
 
     const eventOptions = ['All Events', 'New Token Launch', 'Whale Buy Detected', 'Liquidity Removal', 'Smart Money Accumulation', 'Sniper Bot Swarm'];
+    const severityOptions = ['All Severity', 'High', 'Medium', 'Low'];
 
     return (
         <div className="flex flex-col gap-6 relative overflow-visible">
-            {/* Header Area */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            
+            {/* Detect Specific Token Anomalies Section - Full Width */}
+            <div className="bg-card border border-border rounded-2xl p-6 md:p-8 flex flex-col gap-4 w-full shadow-sm">
                 <div>
-                    <h1 className="text-2xl font-bold mb-1">Global Detection Radar</h1>
-                    <p className="text-text-medium text-sm">Real-time detection of whale signals and anomalies.</p>
+                    <h2 className="text-xl md:text-2xl font-bold text-text-light">Detect Specific Token Anomalies</h2>
+                    <p className="text-text-medium text-sm md:text-base leading-relaxed mt-1">
+                        Enter a contract address to scan for real-time whale movements, smart money signals, and critical risk alerts for a specific asset.
+                    </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-green/10 border border-primary-green/30 text-primary-green text-xs font-semibold cursor-default">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary-green animate-pulse"></div> Live
-                    </div>
-                </div>
-            </div>
-
-            {/* Detect Specific Token Anomalies Section */}
-            <div className="bg-card border border-border rounded-2xl p-6 md:p-8 flex flex-col gap-4 text-center max-w-2xl mx-auto w-full">
-                <h2 className="text-xl md:text-2xl font-bold text-text-light">Detect Specific Token Anomalies</h2>
-                <p className="text-text-medium text-sm md:text-base leading-relaxed">
-                    Enter a contract address to scan for real-time whale movements, smart money signals, and critical risk alerts for a specific asset.
-                </p>
-                <form onSubmit={handleSubmit} className="flex gap-3 mt-2">
-                    <div className="flex-1 bg-[#111315] border border-border rounded-xl flex items-center px-4">
+                <form onSubmit={handleSubmit} className="flex gap-3 mt-2 w-full">
+                    <div className="flex-1 bg-[#111315] border border-border rounded-xl flex items-center px-4 transition-colors focus-within:border-primary-green/50">
+                        <Search className="text-text-medium mr-2" size={20} />
                         <input 
                             type="text" 
-                            className="bg-transparent border-none text-text-light outline-none w-full py-3.5 text-[0.95rem]" 
-                            placeholder="Enter a token or paste link"
+                            className="bg-transparent border-none text-text-light outline-none w-full py-3.5 text-[0.95rem] placeholder-text-dark" 
+                            placeholder="Enter a token address or paste link..."
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                         />
@@ -180,7 +173,7 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
 
             {/* Global Detection Chart */}
             <div className="bg-card border border-border rounded-2xl overflow-visible shadow-sm">
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_250px]">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_250px]">
                     <div className="p-6">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                             <h3 className="card-title mb-0">Global Detection Chart</h3>
@@ -197,7 +190,7 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
                         <div ref={chartRef} className="w-full min-h-[320px]"></div>
                     </div>
                     
-                    <div className="border-t md:border-t-0 md:border-l border-border p-6 bg-card-hover/20">
+                    <div className="border-t lg:border-t-0 lg:border-l border-border p-6 bg-card-hover/20">
                         <h3 className="card-title text-base font-bold">Quick Actions</h3>
                         <div className="flex flex-col gap-2">
                             {[
@@ -216,8 +209,13 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
             </div>
 
             {/* Global Feed Filters */}
-            <div className="mb-4 relative z-50">
-                <h3 className="text-lg font-bold mb-4">Detection Feed</h3>
+            <div className="relative z-50 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                     <h3 className="text-lg font-bold">Detection Feed</h3>
+                     <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-primary-green/10 border border-primary-green/30 text-primary-green text-xs font-bold uppercase tracking-wide shadow-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary-green animate-pulse"></div> Live Radar
+                    </div>
+                </div>
                 <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-3 px-1">
                     <div className="filter-wrapper relative flex-shrink-0">
                         <button 
@@ -231,6 +229,22 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
                             <div className="filter-popup" style={getDropdownStyle('feedChain')}>
                                 {['All Chains', 'Solana', 'Ethereum', 'BNB Chain'].map(c => (
                                     <div key={c} className="filter-list-item" onClick={() => { setFeedChain(c); setActiveFilter(null); }}>{c}</div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="filter-wrapper relative flex-shrink-0">
+                        <button 
+                            className={`filter-pill ${activeFilter === 'severity' ? 'active' : ''}`} 
+                            onClick={() => toggleFilter('severity')}
+                            ref={el => (buttonRefs.current['severity'] = el)}
+                        >
+                            <AlertTriangle size={14} /> {severity} <ChevronDown size={14} />
+                        </button>
+                        {activeFilter === 'severity' && (
+                            <div className="filter-popup" style={getDropdownStyle('severity')}>
+                                {severityOptions.map(s => (
+                                    <div key={s} className="filter-list-item" onClick={() => { setSeverity(s); setActiveFilter(null); }}>{s}</div>
                                 ))}
                             </div>
                         )}
@@ -262,28 +276,29 @@ export const Detection: React.FC<DetectionProps> = ({ onSearch }) => {
                 </div>
             </div>
 
-            {/* Global Detection Feed (Vertical List as requested) */}
-            <div className="flex flex-col gap-4 relative z-10 max-w-3xl mx-auto w-full">
+            {/* Global Detection Feed (Grid Layout) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 relative z-10 w-full">
                 {detectionEvents.map((event, idx) => (
-                    <div key={idx} className="bg-card border border-border rounded-xl flex overflow-hidden group hover:border-text-medium transition-colors shadow-md">
+                    <div key={idx} className="bg-card border border-border rounded-xl flex overflow-hidden group hover:border-text-medium transition-colors shadow-md h-full">
                         {/* Left Indicator Line */}
                         <div className={`w-1.5 shrink-0 bg-${event.color}`}></div>
                         
-                        <div className="flex-1 p-5 md:p-6 flex flex-col justify-between gap-3">
-                            <div className="flex justify-between items-center">
-                                <div className={`flex items-center gap-2.5 font-bold text-sm text-${event.color}`}>
-                                    {event.icon} {event.type}
+                        <div className="flex-1 p-5 flex flex-col justify-between gap-3">
+                            <div>
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className={`flex items-center gap-2 font-bold text-xs text-${event.color} uppercase tracking-wide`}>
+                                        {event.icon} {event.type.split(' ').slice(0, 2).join(' ')}
+                                    </div>
+                                    <span className="text-[10px] text-text-dark font-mono whitespace-nowrap">{event.time}</span>
                                 </div>
-                                <span className="text-xs text-text-dark font-medium">{event.time}</span>
+                                <p className="text-sm text-text-light font-medium leading-snug line-clamp-2">
+                                    {event.desc}
+                                </p>
                             </div>
                             
-                            <p className="text-sm text-text-medium leading-relaxed font-medium">
-                                {event.desc}
-                            </p>
-                            
-                            <div className="flex justify-between items-center pt-2 border-t border-border/50">
-                                <span className="text-text-light font-extrabold text-[0.95rem] tracking-tight">{event.token}</span>
-                                <span className="text-text-light font-extrabold text-[0.95rem] tracking-tight">{event.amt}</span>
+                            <div className="flex justify-between items-center pt-3 border-t border-border/50 mt-auto">
+                                <span className="text-text-light font-bold text-sm bg-card-hover px-2 py-0.5 rounded border border-border">{event.token}</span>
+                                <span className="text-text-light font-bold text-sm">{event.amt}</span>
                             </div>
                         </div>
                     </div>

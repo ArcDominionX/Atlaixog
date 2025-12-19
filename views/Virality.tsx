@@ -59,31 +59,35 @@ export const Virality: React.FC = () => {
         };
     }, [timeFilter]);
 
+    // Narrative Map Data - Updated with specific colors and positions
+    const centerToken = { name: searchQuery || '$WIF', img: 'https://cryptologos.cc/logos/dogwifhat-wif-logo.png' };
     const narratives = [
-        { name: 'Gaming', color: '#27AE60', size: 60, top: 10, left: 10 },
-        { name: 'AI', color: '#2F80ED', size: 70, top: 10, left: 75 }, 
-        { name: 'DeFi', color: '#27AE60', size: 55, top: 65, left: 5 },
-        { name: 'Memes', color: '#EB5757', size: 60, top: 20, left: 50 } 
+        { name: 'AI', color: '#2F80ED', top: 20, left: 20 },      // Blue
+        { name: 'Meme', color: '#EB5757', top: 25, left: 80 },    // Red
+        { name: 'RWA', color: '#F2C94C', top: 75, left: 15 },     // Yellow
+        { name: 'DePin', color: '#9B51E0', top: 80, left: 75 },   // Purple
     ];
 
     return (
         <div className="flex flex-col gap-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-                <Flame className="text-primary-red" /> Virality Prediction Engine
-            </h2>
-
-            {/* Search */}
-            <div className="w-full max-w-2xl mx-auto flex gap-2 mb-4">
-                <div className="flex-1 bg-sidebar border border-border rounded-lg flex items-center">
-                    <input 
-                        type="text" 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Enter a token or paste link"
-                        className="w-full bg-transparent border-none px-4 py-3 outline-none text-text-light"
-                    />
+            
+            {/* Search Section - Full Width - Updated to remove duplicate text */}
+            <div className="bg-card border border-border rounded-2xl p-6 md:p-8 flex flex-col justify-center gap-4 w-full shadow-sm mb-2">
+                <div className="flex gap-3 w-full">
+                    <div className="flex-1 bg-[#111315] border border-border rounded-xl flex items-center px-4 transition-colors focus-within:border-primary-green/50">
+                        <Search className="text-text-medium mr-2" size={20} />
+                        <input 
+                            type="text" 
+                            className="bg-transparent border-none text-text-light outline-none w-full py-3.5 text-[0.95rem] placeholder-text-dark" 
+                            placeholder="Enter a token or paste link..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <button className="bg-primary-green text-main font-bold px-8 rounded-xl hover:bg-primary-green-darker transition-colors shadow-lg whitespace-nowrap">
+                        Search
+                    </button>
                 </div>
-                <button className="btn btn-green px-6 gap-2"><Search size={18} /> Search</button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
@@ -154,37 +158,83 @@ export const Virality: React.FC = () => {
 
                 {/* Right Column */}
                 <div className="flex flex-col gap-6">
-                    {/* Probability Card */}
-                    <div className="bg-gradient-to-br from-card to-[#0F1113] border border-primary-green rounded-2xl p-6 flex flex-col gap-4">
-                        <div className="text-xl font-semibold leading-snug text-white">
-                            <span className="text-primary-green text-2xl font-extrabold">92%</span> chance this token will go <span className="text-primary-green text-2xl font-extrabold">VIRAL</span> in the next 24 hours
+
+                    {/* Probability Card - RESTORED */}
+                    <div className="bg-card border border-primary-green/50 rounded-2xl p-6 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Flame size={120} />
                         </div>
-                        <div className="flex flex-col gap-2">
-                            <div className="flex gap-3 items-center text-sm text-text-medium"><Check size={16} className="text-primary-green" /> Extremely High social velocity</div>
-                            <div className="flex gap-3 items-center text-sm text-text-medium"><Check size={16} className="text-primary-green" /> High meme activity</div>
-                            <div className="flex gap-3 items-center text-sm text-text-medium"><Check size={16} className="text-primary-green" /> Very High KOL amplification</div>
-                            <div className="flex gap-3 items-center text-sm text-text-medium"><Check size={16} className="text-primary-green" /> Solana memes narrative trending</div>
+                        <div className="relative z-10">
+                            <h3 className="text-xl md:text-2xl font-bold mb-4 leading-tight">
+                                <span className="text-primary-green">92% chance</span> this token will go <span className="text-primary-green">VIRAL</span> in the next 24 hours
+                            </h3>
+                            <div className="space-y-3">
+                                {[
+                                    'Extremely High social velocity',
+                                    'High meme activity',
+                                    'Very High KOL amplification',
+                                    'Solana memes narrative trending'
+                                ].map((item, i) => (
+                                    <div key={i} className="flex items-center gap-3 text-sm font-medium text-text-light">
+                                        <div className="w-5 h-5 rounded-full bg-primary-green/20 flex items-center justify-center shrink-0">
+                                            <Check size={12} className="text-primary-green" strokeWidth={3} />
+                                        </div>
+                                        {item}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
-
+                    
                     {/* Narrative Map */}
                     <div className="bg-card border border-border rounded-2xl p-6">
-                        <h3 className="text-lg font-semibold mb-4">Narrative Map</h3>
-                        <div className="relative w-full h-[240px] bg-sidebar rounded-xl overflow-hidden">
+                        <h3 className="text-lg font-semibold mb-6">Narrative Map</h3>
+                        <div className="relative w-full h-[340px] bg-[#111315] rounded-xl overflow-hidden border border-border/30">
+                            {/* Connecting Lines */}
+                            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+                                {narratives.map((n, i) => (
+                                    <line 
+                                        key={i}
+                                        x1="50%" 
+                                        y1="50%" 
+                                        x2={`${n.left}%`} 
+                                        y2={`${n.top}%`} 
+                                        stroke={n.color} 
+                                        strokeWidth="1.5"
+                                        strokeDasharray="4 4"
+                                        opacity="0.3"
+                                    />
+                                ))}
+                            </svg>
+
+                            {/* Center Token */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center animate-fade-in">
+                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-card shadow-[0_0_30px_rgba(38,211,86,0.15)] flex items-center justify-center overflow-hidden p-1 relative z-20">
+                                    <img src={centerToken.img} alt={centerToken.name} className="w-full h-full rounded-full object-cover" onError={(e) => e.currentTarget.src='https://via.placeholder.com/64'} />
+                                </div>
+                            </div>
+
+                            {/* Narrative Bubbles */}
                             {narratives.map((n, i) => (
                                 <div 
                                     key={i} 
-                                    className="absolute rounded-full flex items-center justify-center text-white font-semibold text-xs cursor-pointer shadow-lg animate-float hover:scale-110 hover:z-10 transition-transform duration-300"
-                                    style={{
-                                        width: `${n.size}px`, 
-                                        height: `${n.size}px`, 
-                                        backgroundColor: n.color, 
-                                        top: `${n.top}%`, 
-                                        left: `${n.left}%`,
-                                        animationDelay: `${i * 0.5}s`
-                                    }}
+                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center cursor-pointer group hover:z-30 transition-all duration-300"
+                                    style={{ top: `${n.top}%`, left: `${n.left}%` }}
                                 >
-                                    {n.name}
+                                    <div 
+                                        className="rounded-full w-14 h-14 md:w-16 md:h-16 flex items-center justify-center text-center p-1 shadow-lg transition-all duration-300 group-hover:scale-110 relative z-10 backdrop-blur-sm"
+                                        style={{ 
+                                            backgroundColor: n.color, 
+                                            boxShadow: `0 0 20px ${n.color}50`
+                                        }}
+                                    >
+                                        <span 
+                                            className="text-xs md:text-sm font-bold leading-tight"
+                                            style={{ color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+                                        >
+                                            {n.name}
+                                        </span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
