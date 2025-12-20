@@ -201,23 +201,6 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 </div>
                             ))}
                         </div>
-
-                        {/* 4. Token Stats (Moved from main body) */}
-                        <div className="flex flex-wrap justify-start md:justify-end gap-2 w-full">
-                            {[
-                                { l: 'Txns 24h', v: '38.2K', c: 'text-text-light' },
-                                { l: 'Active Wallets', v: '12.9K', c: 'text-text-light' },
-                                { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
-                                { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
-                                { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
-                                { l: 'Liq Pools', v: '128', c: 'text-text-light' }
-                            ].map((stat, i) => (
-                                <div key={i} className="flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm">
-                                    <span className="text-[9px] font-bold text-text-medium uppercase tracking-wider leading-none mb-1">{stat.l}</span>
-                                    <span className={`text-xs font-bold leading-none ${stat.c}`}>{stat.v}</span>
-                                </div>
-                            ))}
-                        </div>
                     </div>
                 </div>
             </div>
@@ -246,6 +229,24 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                     <div className="w-full h-[500px] relative">
                         <div ref={chartRef} className="w-full h-full"></div>
                     </div>
+                </div>
+
+                {/* Token Stats (Moved back here) */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                    {[
+                        { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' },
+                        { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
+                        { l: 'Holders', v: '84,392', c: 'text-text-light' },
+                        { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
+                        { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
+                        { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
+                        { l: 'Liq Pools', v: '128', c: 'text-text-light' }
+                    ].map((stat, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full shadow-sm">
+                            <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
+                            <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
+                        </div>
+                    ))}
                 </div>
 
                 {/* Container for Activity & Wallets */}
@@ -359,9 +360,8 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                             </button>
                         </div>
                     </div>
-                    
-                    {/* CTA Button */}
-                    <button className="h-full min-h-[100px] md:w-[280px] py-4 bg-gradient-to-r from-primary-green to-[#1fa845] text-main font-bold rounded-xl hover:opacity-90 transition-all shadow-lg transform active:scale-[0.98] text-base uppercase tracking-wide flex flex-col items-center justify-center gap-2">
+
+                    <button className="md:w-[220px] py-4 bg-gradient-to-r from-primary-green to-[#1fa845] text-main font-bold rounded-xl hover:opacity-90 transition-all shadow-lg transform active:scale-[0.98] text-sm uppercase tracking-wide flex flex-col items-center justify-center gap-1.5 h-auto self-stretch">
                          <span>Trade on Uniswap</span>
                          <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white/80 normal-case font-medium">Best rates via aggregator</span>
                     </button>
