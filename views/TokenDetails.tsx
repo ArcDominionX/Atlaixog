@@ -327,7 +327,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 </div>
 
                 {/* Bottom Section: Quick Actions & CTA */}
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-stretch">
+                <div className="flex flex-col gap-6">
                     <div className="bg-card border border-border rounded-xl p-6">
                         <div className="flex items-center gap-2 mb-4">
                              <Zap size={18} className="text-primary-yellow" />
@@ -361,10 +361,25 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
-                    <button className="md:w-[220px] py-4 bg-gradient-to-r from-primary-green to-[#1fa845] text-main font-bold rounded-xl hover:opacity-90 transition-all shadow-lg transform active:scale-[0.98] text-sm uppercase tracking-wide flex flex-col items-center justify-center gap-1.5 h-auto self-stretch">
-                         <span>Trade on Uniswap</span>
-                         <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white/80 normal-case font-medium">Best rates via aggregator</span>
-                    </button>
+                    <a 
+                        href="#"
+                        className="bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:bg-card-hover hover:border-text-medium transition-all cursor-pointer group"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-[#FF007A]/10 flex items-center justify-center border border-[#FF007A]/20">
+                                <img src="https://cryptologos.cc/logos/uniswap-uni-logo.png" alt="Uniswap" className="w-6 h-6" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold text-text-light">Uniswap V3 Pool</span>
+                                <span className="text-[10px] text-text-medium">Best rates via aggregator</span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-text-light group-hover:text-white uppercase tracking-wide">Trade on Uniswap</span>
+                            <ExternalLink size={16} className="text-text-medium group-hover:text-white" />
+                        </div>
+                    </a>
                 </div>
             </div>
         </div>
