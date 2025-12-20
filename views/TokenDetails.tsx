@@ -30,7 +30,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Main Candle Chart Initialization (Reverted to Standard Style)
+    // Main Candle Chart Initialization
     useEffect(() => {
         if (chartRef.current && typeof ApexCharts !== 'undefined') {
             let data = [];
@@ -183,7 +183,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                             </div>
                         </div>
 
-                        {/* 3. Performance Metrics (Row below Stats) */}
+                        {/* 3. Performance Metrics */}
                         <div className="flex flex-wrap justify-start md:justify-end gap-2 w-full">
                             {[
                                 { label: '30M', val: '-0.45%', pos: false },
@@ -201,169 +201,170 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </div>
-            </div>
 
-            {/* 3. Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-                
-                {/* Left Column */}
-                <div className="flex flex-col gap-6">
-                    {/* Main Token Stats Section (Moved Up) */}
-                    <div>
-                        <h3 className="text-lg font-bold mb-4 text-text-light">Token Stats</h3>
-                        <div className="grid grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
+                        {/* 4. Token Stats (Moved from main body) */}
+                        <div className="flex flex-wrap justify-start md:justify-end gap-2 w-full">
                             {[
-                                { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' }, 
-                                { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
+                                { l: 'Txns 24h', v: '38.2K', c: 'text-text-light' },
+                                { l: 'Active Wallets', v: '12.9K', c: 'text-text-light' },
                                 { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
                                 { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
                                 { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
                                 { l: 'Liq Pools', v: '128', c: 'text-text-light' }
                             ].map((stat, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full">
-                                    <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
-                                    <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
+                                <div key={i} className="flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm">
+                                    <span className="text-[9px] font-bold text-text-medium uppercase tracking-wider leading-none mb-1">{stat.l}</span>
+                                    <span className={`text-xs font-bold leading-none ${stat.c}`}>{stat.v}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    {/* Standard Chart Section (Reverted & Moved Down) */}
-                    <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
-                        <div className="flex justify-between items-center p-3 border-b border-border bg-[#16181a]">
-                            <div className="flex gap-1">
-                                {['5m', '15m', '1h', '4h', '1D', '1W'].map(t => (
-                                    <button 
-                                        key={t} 
-                                        onClick={() => setTimeframe(t)}
-                                        className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeframe === t ? 'bg-[#2F80ED] text-white shadow-md' : 'text-text-medium hover:bg-card-hover hover:text-text-light'}`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
-                            <button className="text-xs flex items-center gap-1.5 text-text-medium hover:text-text-light font-medium px-3 py-1.5 rounded hover:bg-card-hover transition-colors">
-                                <ExternalLink size={14} /> Open in TradingView
-                            </button>
+            {/* 3. Main Content (No Sidebar) */}
+            <div className="flex flex-col gap-6">
+                
+                {/* Standard Chart Section */}
+                <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center p-3 border-b border-border bg-[#16181a]">
+                        <div className="flex gap-1">
+                            {['5m', '15m', '1h', '4h', '1D', '1W'].map(t => (
+                                <button 
+                                    key={t} 
+                                    onClick={() => setTimeframe(t)}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeframe === t ? 'bg-[#2F80ED] text-white shadow-md' : 'text-text-medium hover:bg-card-hover hover:text-text-light'}`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
                         </div>
-                        <div className="w-full h-[500px] relative">
-                            <div ref={chartRef} className="w-full h-full"></div>
-                        </div>
+                        <button className="text-xs flex items-center gap-1.5 text-text-medium hover:text-text-light font-medium px-3 py-1.5 rounded hover:bg-card-hover transition-colors">
+                            <ExternalLink size={14} /> Open in TradingView
+                        </button>
                     </div>
-
-                    {/* Container for Activity & Wallets (Responsive Layout: Stacked on Mobile/Tablet, Side-by-Side on Desktop) */}
-                    <div className="flex flex-col xl:flex-row gap-6 w-full">
-                        {/* On-Chain Activity */}
-                        <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
-                            <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
-                            <div className="flex flex-col flex-grow">
-                                {[
-                                    { type: 'Liquidity Added', val: '+$12.4M', desc: 'added to Uniswap V3', time: '2h ago', color: 'text-primary-green' },
-                                    { type: 'Large Transaction', val: '3,200 ETH', desc: 'transferred from 0x9f...32a', time: '4h ago', color: 'text-primary-blue' },
-                                    { type: 'Liquidity Removed', val: '-$3.1M', desc: 'withdrawn from SushiSwap', time: '6h ago', color: 'text-primary-red' },
-                                    { type: 'Transaction Spike', val: 'Surge', desc: 'in transactions detected', time: '8h ago', color: 'text-primary-purple' },
-                                    { type: 'Large Buy', val: '500 ETH', desc: 'bought by Whale 0x3a', time: '9h ago', color: 'text-primary-green' },
-                                ].map((item, i) => (
-                                    <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
-                                        <div>
-                                            <div className={`font-bold text-sm ${item.color} mb-0.5`}>{item.type}</div>
-                                            <div className="text-xs text-text-medium"><span className="font-bold text-text-light">{item.val}</span> {item.desc}</div>
-                                        </div>
-                                        <div className="text-xs text-text-dark font-mono font-medium whitespace-nowrap ml-2">{item.time}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                                See More Activity
-                            </button>
-                        </div>
-
-                        {/* Wallet Interactions Table */}
-                        <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
-                            <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
-                            <div className="overflow-x-auto flex-grow custom-scrollbar pb-2">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-text-dark uppercase tracking-wider border-b border-border">
-                                            <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
-                                            <th className="pb-4 font-bold w-[20%]">Amount</th>
-                                            <th className="pb-4 font-bold w-[15%]">Time</th>
-                                            <th className="pb-4 font-bold w-[30%]">Wallet</th>
-                                            <th className="pb-4 text-right pr-2 font-bold w-[20%]">Options</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {[
-                                            { w: '0x9f...32a', a: 'Buy', amt: '1,200 ETH', t: '4h ago', type: 'buy' },
-                                            { w: '0x4b...91c', a: 'Sell', amt: '800 ETH', t: '5h ago', type: 'sell' },
-                                            { w: '0x1c...99b', a: 'Buy', amt: '450 ETH', t: '8h ago', type: 'buy' },
-                                            { w: '0x7d...a44', a: 'Sell', amt: '1,500 ETH', t: '9h ago', type: 'sell' },
-                                            { w: '0x3a...11f', a: 'Buy', amt: '200 ETH', t: '11h ago', type: 'buy' },
-                                        ].map((row, i) => (
-                                            <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/40 transition-colors">
-                                                <td className="py-5 pl-2">
-                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
-                                                        row.type === 'buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
-                                                    }`}>
-                                                        {row.a}
-                                                    </span>
-                                                </td>
-                                                <td className="py-5 font-bold text-text-light text-xs">{row.amt}</td>
-                                                <td className="py-5 text-text-medium font-medium text-xs whitespace-nowrap">{row.t}</td>
-                                                <td className="py-5 font-mono text-primary-blue cursor-pointer hover:underline text-xs">{row.w}</td>
-                                                <td className="py-5 text-right pr-2">
-                                                    <div className="flex gap-2 justify-end">
-                                                        <button className="px-2 py-1 bg-transparent border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">View</button>
-                                                        <button className="px-2 py-1 bg-primary-green/10 border border-primary-green/30 text-primary-green text-[10px] font-bold rounded hover:bg-primary-green hover:text-main transition-all uppercase">Track</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                                See More Interactions
-                            </button>
-                        </div>
+                    <div className="w-full h-[500px] relative">
+                        <div ref={chartRef} className="w-full h-full"></div>
                     </div>
                 </div>
 
-                {/* Right Column: Sidebar Info */}
-                <div className="flex flex-col gap-6">
-                    
-                    {/* Quick Actions */}
-                    <div className="bg-card border border-border rounded-xl overflow-hidden">
-                        <div className="p-4 border-b border-border bg-card-hover/30">
-                            <h3 className="font-bold text-base">Quick Actions</h3>
+                {/* Container for Activity & Wallets */}
+                <div className="flex flex-col xl:flex-row gap-6 w-full">
+                    {/* On-Chain Activity */}
+                    <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
+                        <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
+                        <div className="flex flex-col flex-grow">
+                            {[
+                                { type: 'Liquidity Added', val: '+$12.4M', desc: 'added to Uniswap V3', time: '2h ago', color: 'text-primary-green' },
+                                { type: 'Large Transaction', val: '3,200 ETH', desc: 'transferred from 0x9f...32a', time: '4h ago', color: 'text-primary-blue' },
+                                { type: 'Liquidity Removed', val: '-$3.1M', desc: 'withdrawn from SushiSwap', time: '6h ago', color: 'text-primary-red' },
+                                { type: 'Transaction Spike', val: 'Surge', desc: 'in transactions detected', time: '8h ago', color: 'text-primary-purple' },
+                                { type: 'Large Buy', val: '500 ETH', desc: 'bought by Whale 0x3a', time: '9h ago', color: 'text-primary-green' },
+                            ].map((item, i) => (
+                                <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
+                                    <div>
+                                        <div className={`font-bold text-sm ${item.color} mb-0.5`}>{item.type}</div>
+                                        <div className="text-xs text-text-medium"><span className="font-bold text-text-light">{item.val}</span> {item.desc}</div>
+                                    </div>
+                                    <div className="text-xs text-text-dark font-mono font-medium whitespace-nowrap ml-2">{item.time}</div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="p-4 grid grid-cols-2 gap-3">
-                            <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
-                                <Scan size={20} className="text-text-medium group-hover:text-primary-green transition-colors" />
+                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
+                            See More Activity
+                        </button>
+                    </div>
+
+                    {/* Wallet Interactions Table */}
+                    <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
+                        <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
+                        <div className="overflow-x-auto flex-grow custom-scrollbar pb-2">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="text-left text-xs text-text-dark uppercase tracking-wider border-b border-border">
+                                        <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
+                                        <th className="pb-4 font-bold w-[20%]">Amount</th>
+                                        <th className="pb-4 font-bold w-[15%]">Time</th>
+                                        <th className="pb-4 font-bold w-[30%]">Wallet</th>
+                                        <th className="pb-4 text-right pr-2 font-bold w-[20%]">Options</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {[
+                                        { w: '0x9f...32a', a: 'Buy', amt: '1,200 ETH', t: '4h ago', type: 'buy' },
+                                        { w: '0x4b...91c', a: 'Sell', amt: '800 ETH', t: '5h ago', type: 'sell' },
+                                        { w: '0x1c...99b', a: 'Buy', amt: '450 ETH', t: '8h ago', type: 'buy' },
+                                        { w: '0x7d...a44', a: 'Sell', amt: '1,500 ETH', t: '9h ago', type: 'sell' },
+                                        { w: '0x3a...11f', a: 'Buy', amt: '200 ETH', t: '11h ago', type: 'buy' },
+                                    ].map((row, i) => (
+                                        <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/40 transition-colors">
+                                            <td className="py-5 pl-2">
+                                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
+                                                    row.type === 'buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
+                                                }`}>
+                                                    {row.a}
+                                                </span>
+                                            </td>
+                                            <td className="py-5 font-bold text-text-light text-xs">{row.amt}</td>
+                                            <td className="py-5 text-text-medium font-medium text-xs whitespace-nowrap">{row.t}</td>
+                                            <td className="py-5 font-mono text-primary-blue cursor-pointer hover:underline text-xs">{row.w}</td>
+                                            <td className="py-5 text-right pr-2">
+                                                <div className="flex gap-2 justify-end">
+                                                    <button className="px-2 py-1 bg-transparent border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">View</button>
+                                                    <button className="px-2 py-1 bg-primary-green/10 border border-primary-green/30 text-primary-green text-[10px] font-bold rounded hover:bg-primary-green hover:text-main transition-all uppercase">Track</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
+                            See More Interactions
+                        </button>
+                    </div>
+                </div>
+
+                {/* Bottom Section: Quick Actions & CTA */}
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-stretch">
+                    <div className="bg-card border border-border rounded-xl p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                             <Zap size={18} className="text-primary-yellow" />
+                             <h3 className="font-bold text-base">Quick Actions</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <button className="bg-card-hover hover:bg-border border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-3 transition-colors group">
+                                <div className="w-10 h-10 rounded-full bg-main flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Scan size={20} className="text-text-medium group-hover:text-primary-green transition-colors" />
+                                </div>
                                 <span className="text-xs font-bold text-text-light">Risk Scan</span>
                             </button>
-                            <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
-                                <Radar size={20} className="text-text-medium group-hover:text-primary-yellow transition-colors" />
+                            <button className="bg-card-hover hover:bg-border border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-3 transition-colors group">
+                                <div className="w-10 h-10 rounded-full bg-main flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Radar size={20} className="text-text-medium group-hover:text-primary-yellow transition-colors" />
+                                </div>
                                 <span className="text-xs font-bold text-text-light">Detection</span>
                             </button>
-                            <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
-                                <Wallet size={20} className="text-text-medium group-hover:text-primary-blue transition-colors" />
+                            <button className="bg-card-hover hover:bg-border border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-3 transition-colors group">
+                                <div className="w-10 h-10 rounded-full bg-main flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Wallet size={20} className="text-text-medium group-hover:text-primary-blue transition-colors" />
+                                </div>
                                 <span className="text-xs font-bold text-text-light">Wallet Tracking</span>
                             </button>
-                            <button className="bg-card-hover hover:bg-border border border-border rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors group">
-                                <Bell size={20} className="text-text-medium group-hover:text-primary-red transition-colors" />
+                            <button className="bg-card-hover hover:bg-border border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-3 transition-colors group">
+                                <div className="w-10 h-10 rounded-full bg-main flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Bell size={20} className="text-text-medium group-hover:text-primary-red transition-colors" />
+                                </div>
                                 <span className="text-xs font-bold text-text-light">Set Alert</span>
                             </button>
                         </div>
                     </div>
-
-                    {/* CTA */}
-                    <button className="w-full py-4 bg-gradient-to-r from-primary-green to-[#1fa845] text-main font-bold rounded-xl hover:opacity-90 transition-all shadow-lg transform active:scale-[0.98] text-sm uppercase tracking-wide">
-                        Trade on Uniswap
+                    
+                    {/* CTA Button */}
+                    <button className="h-full min-h-[100px] md:w-[280px] py-4 bg-gradient-to-r from-primary-green to-[#1fa845] text-main font-bold rounded-xl hover:opacity-90 transition-all shadow-lg transform active:scale-[0.98] text-base uppercase tracking-wide flex flex-col items-center justify-center gap-2">
+                         <span>Trade on Uniswap</span>
+                         <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white/80 normal-case font-medium">Best rates via aggregator</span>
                     </button>
-
                 </div>
             </div>
         </div>
