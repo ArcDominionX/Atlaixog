@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 
 interface AuthScreenProps {
@@ -10,7 +11,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-main animate-fade-in text-center">
             <div className="flex items-center gap-3 text-3xl font-bold mb-2">
-                <img src="./logo.png" alt="Logo" className="w-12 h-12" onError={(e) => e.currentTarget.src='https://via.placeholder.com/48'} />
+                <img 
+                    src="./logo.png" 
+                    alt="Atlaix Logo" 
+                    className="w-12 h-12 object-contain" 
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
                 Atlaix
             </div>
             <p className="text-text-medium mb-12">Anticipating Trends Ahead of the Market...</p>

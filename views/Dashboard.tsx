@@ -1,20 +1,9 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, ArrowUp, ArrowDown, Plus, Search, ChevronRight, Settings } from 'lucide-react';
+import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, ArrowUp, ArrowDown, Plus, Search, ChevronRight, Settings, Database, Server } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DualRangeSlider } from '../components/DualRangeSlider';
-
-const marketDataMock: MarketCoin[] = [
-    {id: 1, chain: 'bitcoin', name: 'Bitcoin', ticker: 'BTC', price: '$83,913.68', h1: '-0.28%', h24: '+2.57%', d7: '-12.39%', cap: '$1.67T', dexBuy: '$9.55M', dexSell: '$1.73M', dexFlow: 80, img: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png', trend: 'Bullish'},
-    {id: 2, chain: 'ethereum', name: 'Ethereum', ticker: 'ETH', price: '$2,717.22', h1: '-0.45%', h24: '+1.17%', d7: '-13.77%', cap: '$327B', dexBuy: '$7.12M', dexSell: '$0', dexFlow: 95, img: 'https://cryptologos.cc/logos/ethereum-eth-logo.png', trend: 'Bearish'},
-    {id: 3, chain: 'ethereum', name: 'Tether', ticker: 'USDT', price: '$0.99', h1: '+0.03%', h24: '+0.06%', d7: '+0.01%', cap: '$184B', dexBuy: '$48.32M', dexSell: '$43.61M', dexFlow: 55, img: 'https://cryptologos.cc/logos/tether-usdt-logo.png', trend: 'Bullish'},
-    {id: 4, chain: 'xrp', name: 'XRP', ticker: 'XRP', price: '$1.91', h1: '-0.27%', h24: '+0.79%', d7: '-15.32%', cap: '$115B', dexBuy: '$2.41M', dexSell: '$250.14K', dexFlow: 70, img: 'https://cryptologos.cc/logos/xrp-xrp-logo.png', trend: 'Bearish'},
-    {id: 5, chain: 'bnb', name: 'BNB', ticker: 'BNB', price: '$817', h1: '+0.02%', h24: '+1.04%', d7: '-12.32%', cap: '$112B', dexBuy: '$11.82M', dexSell: '$9.84M', dexFlow: 60, img: 'https://cryptologos.cc/logos/bnb-bnb-logo.png', trend: 'Bearish'},
-    {id: 6, chain: 'solana', name: 'Solana', ticker: 'SOL', price: '$126.61', h1: '+1.20%', h24: '+4.57%', d7: '-5.39%', cap: '$58B', dexBuy: '$15.55M', dexSell: '$12.73M', dexFlow: 85, img: 'https://cryptologos.cc/logos/solana-sol-logo.png', trend: 'Bullish'},
-    {id: 7, chain: 'cardano', name: 'Cardano', ticker: 'ADA', price: '$0.45', h1: '-0.10%', h24: '+0.57%', d7: '-10.39%', cap: '$15B', dexBuy: '$1.55M', dexSell: '$1.23M', dexFlow: 40, img: 'https://cryptologos.cc/logos/cardano-ada-logo.png', trend: 'Bearish'},
-    {id: 8, chain: 'avalanche', name: 'Avalanche', ticker: 'AVAX', price: '$39.36', h1: '+0.50%', h24: '+2.17%', d7: '-8.39%', cap: '$14B', dexBuy: '$5.55M', dexSell: '$4.23M', dexFlow: 65, img: 'https://cryptologos.cc/logos/avalanche-avax-logo.png', trend: 'Bullish'},
-    {id: 9, chain: 'dogecoin', name: 'Dogecoin', ticker: 'DOGE', price: '$0.15', h1: '-0.50%', h24: '+5.57%', d7: '-12.39%', cap: '$21B', dexBuy: '$12.55M', dexSell: '$10.73M', dexFlow: 75, img: 'https://cryptologos.cc/logos/dogecoin-doge-logo.png', trend: 'Bullish'},
-    {id: 10, chain: 'polkadot', name: 'Polkadot', ticker: 'DOT', price: '$7.80', h1: '+0.28%', h24: '+1.17%', d7: '-15.39%', cap: '$11B', dexBuy: '$3.55M', dexSell: '$3.73M', dexFlow: 45, img: 'https://cryptologos.cc/logos/polkadot-dot-logo.png', trend: 'Bearish'},
-];
+import { DatabaseService } from '../services/DatabaseService';
 
 const mcapLabels = ['1k', '10k', '100k', '1M', '10M', '100M', '>100M'];
 const ageOptions = ['< 1 day', '1 day', '7 days', '1 week', '1 month', '1 year', '> 1 year'];
@@ -34,8 +23,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [activeAgeDropdown, setActiveAgeDropdown] = useState<'from' | 'to' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     
+    // Data & System State
+    const [marketData, setMarketData] = useState<MarketCoin[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [dbStatus, setDbStatus] = useState<{source: string, latency: number} | null>(null);
+    
     // Refs for positioning
     const buttonRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+    // Load Data via DatabaseService
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const response = await DatabaseService.getMarketData();
+                setMarketData(response.data);
+                setDbStatus({ source: response.source, latency: response.latency });
+            } catch (e) {
+                console.error("DB Error", e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, [timeFrame]); // Reload when timeframe changes to simulate new query
 
     const toggleFilter = (filterName: string) => {
         setActiveFilter(activeFilter === filterName ? null : filterName);
@@ -90,7 +101,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     }, [activeFilter]);
 
     const getChange = (coin: MarketCoin) => { 
-        // Helper to parse percentage string
         const parseVal = (str: string) => parseFloat(str.replace('%', '').replace('+', ''));
         const formatVal = (num: number) => (num > 0 ? '+' : '') + num.toFixed(2) + '%';
         
@@ -99,10 +109,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
         const d7 = parseVal(coin.d7);
 
         switch(timeFrame) {
-            case 'All': return formatVal(d7 * 12.5); // Mock All time
+            case 'All': return formatVal(d7 * 12.5);
             case '1H': return coin.h1;
-            case '6H': return formatVal(h24 * 0.25); // Simulated data
-            case '12H': return formatVal(h24 * 0.5); // Simulated data
+            case '6H': return formatVal(h24 * 0.25);
+            case '12H': return formatVal(h24 * 0.5);
             case '1D': return coin.h24;
             case '1W': return coin.d7;
             default: return coin.h24;
@@ -162,7 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                         <h3 className="font-bold text-lg">Live Market Data</h3>
                     </div>
                     
-                    {/* Timeframe Filter - Styled like Pills, Right Aligned, New Row */}
+                    {/* Timeframe Filter */}
                     <div className="flex flex-wrap justify-end gap-2 w-full">
                         {['All', '1H', '6H', '12H', '1D', '1W'].map((tf) => (
                             <button 
@@ -300,7 +310,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                             {activeFilter === 'chain' && (
                                 <div className="filter-popup" style={getDropdownStyle('chain')}>
                                     <ul className="flex flex-col gap-1">
-                                        {['All', 'Solana', 'Ethereum', 'BNB Chain', 'Arbitrum', 'Bitcoin', 'Tron', 'Polygon'].map(c => (<li key={c} className="filter-list-item" onClick={() => setActiveFilter(null)}>{c}</li>))}
+                                        {['All', 'Solana', 'Ethereum', 'Base', 'Arbitrum', 'Optimism', 'BNB Chain', 'Polygon'].map(c => (<li key={c} className="filter-list-item" onClick={() => setActiveFilter(null)}>{c}</li>))}
                                     </ul>
                                 </div>
                             )}
@@ -311,69 +321,76 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
 
                 {/* Table (Compact) */}
                 <div className="overflow-x-auto min-h-[400px] custom-scrollbar">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th className="sticky-col" style={{minWidth: '135px'}}>Chain / Token <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                <th>Price <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                <th style={{width: '90px'}}>
-                                    Chg {timeFrame} <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div>
-                                </th>
-                                <th>MCap <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                <th>DEX Buys</th>
-                                <th>DEX Sells</th>
-                                <th>DEX Flows</th>
-                                <th>AI Trend</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {marketDataMock.slice(0, 10).map((coin) => {
-                                const changeVal = getChange(coin);
-                                return (
-                                    <tr 
-                                        key={coin.id} 
-                                        onClick={() => onTokenSelect && onTokenSelect(coin)}
-                                        className="cursor-pointer hover:bg-card-hover/50 transition-colors"
-                                    >
-                                        <td className="sticky-col">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-5 h-5 flex items-center justify-center bg-card-hover rounded-full border border-border/50 shrink-0">
-                                                    <img src={getChainIcon(coin.chain)} alt={coin.chain} className="w-3.5 h-3.5 opacity-80" />
+                    {isLoading ? (
+                        <div className="w-full h-[400px] flex items-center justify-center flex-col gap-3">
+                            <div className="w-8 h-8 border-2 border-primary-green border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-sm font-bold text-text-medium">Syncing with Market Database...</div>
+                        </div>
+                    ) : (
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th className="sticky-col" style={{minWidth: '135px'}}>Chain / Token <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
+                                    <th>Price <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
+                                    <th style={{width: '90px'}}>
+                                        Chg {timeFrame} <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div>
+                                    </th>
+                                    <th>MCap <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
+                                    <th>DEX Buys</th>
+                                    <th>DEX Sells</th>
+                                    <th>DEX Flows</th>
+                                    <th>AI Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {marketData.slice(0, 10).map((coin) => {
+                                    const changeVal = getChange(coin);
+                                    return (
+                                        <tr 
+                                            key={coin.id} 
+                                            onClick={() => onTokenSelect && onTokenSelect(coin)}
+                                            className="cursor-pointer hover:bg-card-hover/50 transition-colors"
+                                        >
+                                            <td className="sticky-col">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-5 h-5 flex items-center justify-center bg-card-hover rounded-full border border-border/50 shrink-0">
+                                                        <img src={getChainIcon(coin.chain)} alt={coin.chain} className="w-3.5 h-3.5 opacity-80" />
+                                                    </div>
+                                                    <img src={coin.img} alt={coin.name} width="20" height="20" className="rounded-full shrink-0" onError={handleImageError} />
+                                                    <div className="flex flex-col">
+                                                        <div className="font-bold text-sm leading-none">{coin.ticker}</div>
+                                                        <div className="text-[9px] text-text-dark font-medium leading-tight mt-0.5">{coin.name}</div>
+                                                    </div>
                                                 </div>
-                                                <img src={coin.img} alt={coin.name} width="20" height="20" className="rounded-full shrink-0" onError={handleImageError} />
-                                                <div className="flex flex-col">
-                                                    <div className="font-bold text-sm leading-none">{coin.ticker}</div>
-                                                    <div className="text-[9px] text-text-dark font-medium leading-tight mt-0.5">{coin.name}</div>
+                                            </td>
+                                            <td className="font-bold text-sm">{coin.price}</td>
+                                            <td className={`font-bold text-sm ${getPercentColor(changeVal)}`}>{changeVal}</td>
+                                            <td className="font-medium text-sm">{coin.cap}</td>
+                                            <td className="text-sm">{coin.dexBuy}</td>
+                                            <td className="text-sm">{coin.dexSell}</td>
+                                            <td>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold text-primary-green w-[35px] text-right">${(coin.dexFlow/10).toFixed(1)}M</span>
+                                                    <div className="w-[60px] h-1 bg-border rounded-full overflow-hidden">
+                                                        <div className="h-full bg-primary-green" style={{width: `${coin.dexFlow}%`}}></div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="font-bold text-sm">{coin.price}</td>
-                                        <td className={`font-bold text-sm ${getPercentColor(changeVal)}`}>{changeVal}</td>
-                                        <td className="font-medium text-sm">{coin.cap}</td>
-                                        <td className="text-sm">{coin.dexBuy}</td>
-                                        <td className="text-sm">{coin.dexSell}</td>
-                                        <td>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-primary-green w-[35px] text-right">${(coin.dexFlow/10).toFixed(1)}M</span>
-                                                <div className="w-[60px] h-1 bg-border rounded-full overflow-hidden">
-                                                    <div className="h-full bg-primary-green" style={{width: `${coin.dexFlow}%`}}></div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                                                coin.trend === 'Bullish' 
-                                                ? 'bg-primary-green/10 text-primary-green border-primary-green/30' 
-                                                : 'bg-primary-red/10 text-primary-red border-primary-red/30'
-                                            }`}>
-                                                {coin.trend}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                            </td>
+                                            <td>
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                                    coin.trend === 'Bullish' 
+                                                    ? 'bg-primary-green/10 text-primary-green border-primary-green/30' 
+                                                    : 'bg-primary-red/10 text-primary-red border-primary-red/30'
+                                                }`}>
+                                                    {coin.trend}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
 
                 {/* Pagination Button */}

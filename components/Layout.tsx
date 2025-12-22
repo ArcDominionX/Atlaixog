@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ViewState } from '../types';
 import { 
@@ -93,7 +94,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
         />
       )}
 
-      {/* Sidebar - Highest Z-Index to prevent content overlap */}
+      {/* Sidebar */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-[1100] w-[300px] bg-sidebar border-r border-border
         transform transition-transform duration-300 ease-in-out flex flex-col shadow-2xl md:shadow-none
@@ -101,7 +102,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
       `}>
         <div className="p-6 pb-4">
           <div className="flex items-center gap-3 text-2xl font-bold text-text-light">
-            <img src="./logo.png" alt="Logo" className="w-9 h-9 object-contain" onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/32')} />
+            <img 
+              src="./logo.png" 
+              alt="Atlaix Logo" 
+              className="w-9 h-9 object-contain" 
+              onError={(e) => (e.currentTarget.style.display = 'none')} 
+            />
             Atlaix
           </div>
         </div>

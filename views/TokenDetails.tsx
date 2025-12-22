@@ -1,20 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Globe, Twitter, Send, ShieldCheck, Activity, Lock, ChevronDown, ExternalLink, Scan, Zap, Wallet, Bell, BarChart2, Settings, Maximize2, Radar } from 'lucide-react';
-import { MarketCoin } from '../types';
 
-// Declare ApexCharts
-declare var ApexCharts: any;
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Copy, Globe, Twitter, Send, ExternalLink, Scan, Zap, Wallet, Bell, Radar } from 'lucide-react';
+import { MarketCoin } from '../types';
 
 interface TokenDetailsProps {
     token: MarketCoin | string;
     onBack: () => void;
 }
 
+declare global {
+    interface Window {
+        TradingView: any;
+    }
+}
+
 export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => {
-    const chartRef = useRef<HTMLDivElement>(null);
-    const chartInstance = useRef<any>(null);
-    const [timeframe, setTimeframe] = useState('15m');
     const [copied, setCopied] = useState(false);
+    const widgetRef = useRef<HTMLDivElement>(null);
 
     // Normalize Token Data
     const tokenName = typeof token === 'string' ? token : token.name;
@@ -30,94 +32,74 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Main Candle Chart Initialization
+    // Helper to map ticker to a valid TradingView symbol
+    const getTradingViewSymbol = (ticker: string) => {
+        const t = ticker.toUpperCase();
+        const map: Record<string, string> = {
+            'BTC': 'BINANCE:BTCUSDT',
+            'ETH': 'BINANCE:ETHUSDT',
+            'SOL': 'BINANCE:SOLUSDT',
+            'BONK': 'BINANCE:BONKUSDT',
+            'WIF': 'KUCOIN:WIFUSDT',
+            'AVAX': 'BINANCE:AVAXUSDT',
+            'BNB': 'BINANCE:BNBUSDT',
+            'XRP': 'BINANCE:XRPUSDT',
+            'ADA': 'BINANCE:ADAUSDT',
+            'DOGE': 'BINANCE:DOGEUSDT',
+            'DOT': 'BINANCE:DOTUSDT'
+        };
+        return map[t] || 'BINANCE:BTCUSDT'; // Default fallback
+    };
+
+    // Initialize TradingView Widget
     useEffect(() => {
-        if (chartRef.current && typeof ApexCharts !== 'undefined') {
-            let data = [];
-            let price = 3400;
-            // Generate data to look somewhat realistic
-            const now = new Date().getTime();
-            for (let i = 0; i < 150; i++) {
-                const open = price + Math.random() * 50 - 25;
-                const close = open + Math.random() * 50 - 25;
-                const high = Math.max(open, close) + Math.random() * 15;
-                const low = Math.min(open, close) - Math.random() * 15;
-                data.push({
-                    x: now - (150 - i) * (timeframe === '15m' ? 900000 : 3600000),
-                    y: [open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2)]
+        const scriptId = 'tradingview-widget-script';
+        const containerId = 'tradingview_widget';
+
+        const initWidget = () => {
+            if (window.TradingView && widgetRef.current) {
+                // Clear previous widget if exists
+                widgetRef.current.innerHTML = ""; 
+                
+                new window.TradingView.widget({
+                    "width": "100%",
+                    "height": 500,
+                    "symbol": getTradingViewSymbol(tokenTicker),
+                    "interval": "15",
+                    "timezone": "Etc/UTC",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "en",
+                    "enable_publishing": false,
+                    "backgroundColor": "#1C1F22",
+                    "gridColor": "#2A2E33",
+                    "hide_top_toolbar": false,
+                    "hide_legend": false,
+                    "save_image": false,
+                    "container_id": containerId,
+                    "toolbar_bg": "#1C1F22",
+                    "withdateranges": true,
+                    "hide_side_toolbar": false,
+                    "allow_symbol_change": true,
+                    "details": false,
+                    "hotlist": false,
+                    "calendar": false,
                 });
-                price = close;
             }
+        };
 
-            const options = {
-                series: [{ data: data }],
-                chart: {
-                    type: 'candlestick',
-                    height: 500,
-                    fontFamily: 'Inter, sans-serif',
-                    background: 'transparent',
-                    toolbar: {
-                        show: true,
-                        tools: {
-                            download: false,
-                            selection: true,
-                            zoom: true,
-                            zoomin: true,
-                            zoomout: true,
-                            pan: true,
-                            reset: true
-                        },
-                        autoSelected: 'pan' 
-                    },
-                    zoom: {
-                        enabled: true,
-                        type: 'x',
-                        autoScaleYaxis: true
-                    }
-                },
-                theme: { mode: 'dark' },
-                xaxis: {
-                    type: 'datetime',
-                    tooltip: { enabled: true },
-                    axisBorder: { show: false },
-                    axisTicks: { show: false },
-                    labels: { style: { colors: '#8F96A3' } },
-                    crosshairs: {
-                        show: true,
-                        width: 1,
-                        position: 'back',
-                        opacity: 0.9,
-                        stroke: { color: '#8F96A3', width: 1, dashArray: 3 }
-                    }
-                },
-                yaxis: {
-                    tooltip: { enabled: true },
-                    opposite: true,
-                    labels: { style: { colors: '#8F96A3' }, formatter: (val: number) => `$${val.toFixed(2)}` }
-                },
-                grid: {
-                    borderColor: '#2A2E33',
-                    strokeDashArray: 4,
-                    xaxis: { lines: { show: true } },
-                    yaxis: { lines: { show: true } }
-                },
-                plotOptions: {
-                    candlestick: {
-                        colors: {
-                            upward: '#26D356',
-                            downward: '#EB5757'
-                        },
-                        wick: { useFillColor: true }
-                    }
-                }
-            };
-
-            if (chartInstance.current) chartInstance.current.destroy();
-            chartInstance.current = new ApexCharts(chartRef.current, options);
-            chartInstance.current.render();
+        // Check if script already exists
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://s3.tradingview.com/tv.js';
+            script.async = true;
+            script.onload = initWidget;
+            document.head.appendChild(script);
+        } else {
+            initWidget();
         }
-        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-    }, [timeframe]);
+    }, [tokenTicker]);
 
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
@@ -208,26 +190,10 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
             {/* 3. Main Content (No Sidebar) */}
             <div className="flex flex-col gap-6">
                 
-                {/* Standard Chart Section */}
+                {/* TRADINGVIEW CHART WIDGET */}
                 <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center p-3 border-b border-border bg-[#16181a]">
-                        <div className="flex gap-1">
-                            {['5m', '15m', '1h', '4h', '1D', '1W'].map(t => (
-                                <button 
-                                    key={t} 
-                                    onClick={() => setTimeframe(t)}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeframe === t ? 'bg-[#2F80ED] text-white shadow-md' : 'text-text-medium hover:bg-card-hover hover:text-text-light'}`}
-                                >
-                                    {t}
-                                </button>
-                            ))}
-                        </div>
-                        <button className="text-xs flex items-center gap-1.5 text-text-medium hover:text-text-light font-medium px-3 py-1.5 rounded hover:bg-card-hover transition-colors">
-                            <ExternalLink size={14} /> Open in TradingView
-                        </button>
-                    </div>
                     <div className="w-full h-[500px] relative">
-                        <div ref={chartRef} className="w-full h-full"></div>
+                        <div id="tradingview_widget" ref={widgetRef} className="w-full h-full"></div>
                     </div>
                 </div>
 

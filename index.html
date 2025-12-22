@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,23 +97,31 @@
         html { font-size: 16px; } 
         body { font-size: 0.9375rem; } 
 
-        /* High-visibility horizontal scrollbar */
+        /* Premium Theme Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-main);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 10px;
+            border: 2px solid var(--bg-main);
+            transition: all 0.3s ease;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-green);
+        }
+
+        /* Legacy class kept for specific horizontal overrides if needed */
         .custom-scrollbar {
             scrollbar-width: thin;
-            scrollbar-color: #3a3f42 transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            height: 6px !important;
-            display: block !important;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.03) !important;
-            border-radius: 10px !important;
-            margin: 0 20px !important;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #4a4f52 !important;
-            border-radius: 10px !important;
+            scrollbar-color: var(--border-color) var(--bg-main);
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
