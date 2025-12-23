@@ -6,10 +6,10 @@ const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
 // --- RESEARCH & GEM REQUIREMENTS ---
 const REQUIREMENTS = {
-    MIN_LIQUIDITY_USD: 50000,    // $50k minimum to flush junk
-    MIN_VOLUME_24H: 50000,       // Must have volume
-    MIN_TXNS_24H: 50,            // "No activity = no discovery"
-    MIN_FDV: 50000,              // Avoid absolute dead coins
+    MIN_LIQUIDITY_USD: 60000,    // $60k minimum to flush junk
+    MIN_VOLUME_24H: 75000,       // Must have active volume
+    MIN_TXNS_24H: 100,           // "No activity = no discovery"
+    MIN_FDV: 100000,             // Avoid absolute dead coins
     MAX_AGE_HOURS_FOR_NEW: 72    // New launch window
 };
 
@@ -17,25 +17,33 @@ const REQUIREMENTS = {
 // Filter out the L1s/Stables themselves to show the "Prospects" trading against them
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
-    'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD'
+    'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD',
+    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH'
 ];
 
 // --- DISCOVERY QUERIES ---
-// querying the quote tokens finds the pairs trading against them (the alts)
-// Expanded list to ensure we get at least 20+ high quality tokens
+// Expanded list to ensure we get a diverse range of tokens across narratives
 const TARGET_QUERIES = [
-    'SOL', 'WETH', 'WBNB', // Core Chains
-    'USDC', 'USDT', // Stable Pairings (often high quality)
-    'BASE', 'BSC', 'ARBITRUM', // Chain Keywords
-    'AI', 'AGENT', 'MEME', 'GAMING', 'RWA', // Narrative Keywords
-    'PEPE', 'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', // Anchors
-    'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE', // Viral Trends
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', // More viral
-    'TURBO', 'NEIRO', 'BABYDOGE', 'DEGEN'
+    // 1. Core Chains & Ecosystems
+    'SOL', 'WETH', 'WBNB', 'BASE', 'BSC', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM',
+    
+    // 2. Stable Pairings (High Quality)
+    'USDC', 'USDT',
+    
+    // 3. Hot Narratives
+    'AI', 'AGENT', 'MEME', 'GAMING', 'RWA', 'DEPIN', 'DAO', 'LAYER2', 'ZK', 'METAVERSE',
+    
+    // 4. Viral & Trending Anchors (Solana/Base/Eth)
+    'PEPE', 'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
+    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO', 'BABYDOGE', 'DEGEN',
+    
+    // 5. DeFi & Infra Heavyweights (To find pairs trading against them or their ecos)
+    'JUP', 'RAY', 'JITO', 'PYTH', 'RENDER', 'TAO', 'ONDO', 'PENDLE', 'ENA', 'AERO', 'PRIME'
 ];
 
-// --- FALLBACK DATA (Diverse Chains - 20 Items for robust list) ---
+// --- FALLBACK DATA (Diverse Chains - 40 Items for robust list) ---
 const FALLBACK_DATA: MarketCoin[] = [
+    // --- MEME / VIRAL ---
     {
         id: 101, name: 'Brett', ticker: 'BRETT', price: '$0.0452', h1: '+2.5%', h24: '+15.2%', d7: '+42.4%',
         cap: '$450M', liquidity: '$12M', volume24h: '$45M', dexBuys: '15200', dexSells: '8400', dexFlow: 85,
@@ -155,6 +163,67 @@ const FALLBACK_DATA: MarketCoin[] = [
         cap: '$85M', liquidity: '$2M', volume24h: '$35M', dexBuys: '12000', dexSells: '4500', dexFlow: 95,
         netFlow: '+$8.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'High',
         age: '1 week', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/FU1q8vJpZNURmBzJkY55.png', trend: 'Bullish', chain: 'solana'
+    },
+    // --- DEFI / INFRA / L2 (ADDED) ---
+    {
+        id: 121, name: 'Jupiter', ticker: 'JUP', price: '$1.05', h1: '+0.5%', h24: '+2.4%', d7: '+12.5%',
+        cap: '$1.4B', liquidity: '$45M', volume24h: '$120M', dexBuys: '18000', dexSells: '15000', dexFlow: 65,
+        netFlow: '+$2.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Low',
+        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/JUPyiwrYJFskUPiHa7hkeR8VUtkPHCLkdPtfVZUX2ht.png', trend: 'Bullish', chain: 'solana'
+    },
+    {
+        id: 122, name: 'Raydium', ticker: 'RAY', price: '$2.15', h1: '+1.2%', h24: '+5.4%', d7: '+18.5%',
+        cap: '$580M', liquidity: '$25M', volume24h: '$45M', dexBuys: '8500', dexSells: '4200', dexFlow: 75,
+        netFlow: '+$4.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Low',
+        age: '2 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R.png', trend: 'Bullish', chain: 'solana'
+    },
+    {
+        id: 123, name: 'Render', ticker: 'RENDER', price: '$7.85', h1: '-0.5%', h24: '+3.2%', d7: '+15.4%',
+        cap: '$3.2B', liquidity: '$55M', volume24h: '$150M', dexBuys: '25000', dexSells: '22000', dexFlow: 55,
+        netFlow: '+$1.5M', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Low',
+        age: '3 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof.png', trend: 'Bullish', chain: 'solana'
+    },
+    {
+        id: 124, name: 'Ondo Finance', ticker: 'ONDO', price: '$1.25', h1: '+0.8%', h24: '+4.5%', d7: '+22.1%',
+        cap: '$1.8B', liquidity: '$35M', volume24h: '$85M', dexBuys: '12000', dexSells: '8000', dexFlow: 68,
+        netFlow: '+$3.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Low',
+        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xfaba6f8e4a5e8ab82f62fe7c39859fae6720f356.png', trend: 'Bullish', chain: 'ethereum'
+    },
+    {
+        id: 125, name: 'Pendle', ticker: 'PENDLE', price: '$4.50', h1: '+2.1%', h24: '+8.5%', d7: '+35.2%',
+        cap: '$1.2B', liquidity: '$28M', volume24h: '$65M', dexBuys: '9500', dexSells: '5200', dexFlow: 72,
+        netFlow: '+$5.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
+        age: '2 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x808507121b80c02388fad14726482e061b8da827.png', trend: 'Bullish', chain: 'ethereum'
+    },
+    {
+        id: 126, name: 'Aerodrome', ticker: 'AERO', price: '$1.15', h1: '+3.5%', h24: '+12.4%', d7: '+45.1%',
+        cap: '$650M', liquidity: '$45M', volume24h: '$85M', dexBuys: '15000', dexSells: '8000', dexFlow: 82,
+        netFlow: '+$8.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'Medium',
+        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x940181a94a35a4569e4529a3cdfb74e38fd98631.png', trend: 'Bullish', chain: 'base'
+    },
+    {
+        id: 127, name: 'Ethena', ticker: 'ENA', price: '$0.85', h1: '-1.2%', h24: '+2.5%', d7: '+10.4%',
+        cap: '$1.5B', liquidity: '$42M', volume24h: '$95M', dexBuys: '18000', dexSells: '16000', dexFlow: 52,
+        netFlow: '+$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Medium',
+        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x57e114b691db790c35207b2e685d4a43181e6061.png', trend: 'Bullish', chain: 'ethereum'
+    },
+    {
+        id: 128, name: 'Bittensor', ticker: 'TAO', price: '$350.00', h1: '+1.5%', h24: '+5.2%', d7: '+25.1%',
+        cap: '$3.5B', liquidity: '$15M', volume24h: '$45M', dexBuys: '5200', dexSells: '4100', dexFlow: 62,
+        netFlow: '+$2.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Medium',
+        age: '1.5 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x77e06c9eccf2e797fd462a92b6d7642ef85b0a44.png', trend: 'Bullish', chain: 'ethereum'
+    },
+    {
+        id: 129, name: 'Prime', ticker: 'PRIME', price: '$12.50', h1: '+2.5%', h24: '+8.4%', d7: '+15.2%',
+        cap: '$450M', liquidity: '$12M', volume24h: '$25M', dexBuys: '4500', dexSells: '3200', dexFlow: 65,
+        netFlow: '+$1.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
+        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x09d905c378b9d37255f9730f065360372f6a7d5b.png', trend: 'Bullish', chain: 'base'
+    },
+    {
+        id: 130, name: 'HarryPotterObama...', ticker: 'BITCOIN', price: '$0.15', h1: '-2.5%', h24: '+5.2%', d7: '+35.4%',
+        cap: '$150M', liquidity: '$8M', volume24h: '$15M', dexBuys: '3500', dexSells: '2800', dexFlow: 58,
+        netFlow: '+$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'High',
+        age: '1.5 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x72e4f9f808c49a2a61de9c5896298920dc4eeea9.png', trend: 'Bullish', chain: 'ethereum'
     }
 ];
 
@@ -270,45 +339,38 @@ export const DatabaseService = {
 
             if (rawPairs.length === 0) throw new Error("No pairs returned from any source");
 
-            // 2. SMART DEDUPLICATION (By Token Address, not Pair)
-            const bestPairsMap = new Map<string, DexPair>();
+            // 2. PRIMARY DEDUPLICATION & CLEANUP
+            // Sort raw pairs by liquidity first to ensure we keep the "real" version if duplicates exist
+            rawPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
 
-            rawPairs.forEach(p => {
-                // Pre-filter: Skip excluded symbols immediately
-                if (EXCLUDED_SYMBOLS.includes(p.baseToken.symbol.toUpperCase())) return;
-                // Filter out wrapped/pegged stables if name contains them to avoid duplicates (like 'USDC.e')
-                if (p.baseToken.name.toLowerCase().includes('usd') && p.baseToken.symbol !== 'USDC') return;
-                
-                // Key = Token Address (Ensures we only get ONE entry per token)
-                const tokenKey = p.baseToken.address;
-                const currentLiquidity = p.liquidity?.usd || 0;
+            const seenSymbols = new Set<string>();
+            const bestPairs: DexPair[] = [];
 
-                if (!bestPairsMap.has(tokenKey)) {
-                    bestPairsMap.set(tokenKey, p);
-                } else {
-                    // CONFLICT RESOLUTION: Keep the pair with HIGHER Liquidity
-                    const existingPair = bestPairsMap.get(tokenKey)!;
-                    const existingLiquidity = existingPair.liquidity?.usd || 0;
+            for (const p of rawPairs) {
+                 const symbol = p.baseToken.symbol.toUpperCase();
+                 
+                 // Skip if we already have this symbol (keeps the one with highest liquidity due to previous sort)
+                 if (seenSymbols.has(symbol)) continue;
 
-                    if (currentLiquidity > existingLiquidity) {
-                        bestPairsMap.set(tokenKey, p);
-                    }
-                }
-            });
+                 // Filter: Must have Image/Logo (Removes low-effort junk)
+                 if (!p.info?.imageUrl) continue;
 
-            const uniquePairs = Array.from(bestPairsMap.values());
+                 seenSymbols.add(symbol);
+                 bestPairs.push(p);
+            }
 
-            // 3. THE "ALPHA" FILTER
-            const filteredPairs = uniquePairs.filter((p: DexPair) => {
+            // 3. THE "ALPHA" FILTER (Strict Metrics)
+            const filteredPairs = bestPairs.filter((p: DexPair) => {
                 const liq = p.liquidity?.usd || 0;
                 const vol = p.volume.h24 || 0;
                 const fdv = p.fdv || 0;
                 const txns = (p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0);
 
                 // --- FLUSH OUT JUNK ---
+                if (EXCLUDED_SYMBOLS.includes(p.baseToken.symbol.toUpperCase())) return false;
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
-                if (txns < REQUIREMENTS.MIN_TXNS_24H) return false; // "No activity = no discovery"
+                if (txns < REQUIREMENTS.MIN_TXNS_24H) return false; 
                 if (fdv < REQUIREMENTS.MIN_FDV) return false;
 
                 // --- CHAIN FILTER ---
