@@ -1,6 +1,6 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Globe, Twitter, Send, ExternalLink, Scan, Zap, Wallet, Bell, Radar, RefreshCw, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Copy, Globe, Twitter, Send, ExternalLink, Scan, Zap, Wallet, Bell, Radar, RefreshCw } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DatabaseService } from '../services/DatabaseService';
 import { MoralisService, RealActivity } from '../services/MoralisService';
@@ -28,11 +28,14 @@ interface EnrichedTokenData {
 const generateActivity = (volume24h: number, price: number, ticker: string) => {
     const activities = [];
     const walletTypes = ['Smart Money', 'Whale', 'Bot', 'Fresh Wallet'];
+    
+    // Safety check for price to avoid division by zero
+    const safePrice = price > 0 ? price : 0.00000001;
 
     for (let i = 0; i < 8; i++) {
         const isBuy = Math.random() > 0.45;
         const usdValue = Math.random() * (volume24h / 1000); 
-        const tokenAmount = usdValue / price;
+        const tokenAmount = usdValue / safePrice;
         const timeAgo = Math.floor(Math.random() * 60);
         const walletAddr = `0x${Math.random().toString(16).substr(2, 4)}...${Math.random().toString(16).substr(2, 3)}`;
 
@@ -49,6 +52,24 @@ const generateActivity = (volume24h: number, price: number, ticker: string) => {
         });
     }
     return activities;
+};
+
+// Helper to map chains for Chart Provider (GeckoTerminal)
+const getChartUrl = (chainId: string, pairAddress: string) => {
+    const chainMap: Record<string, string> = {
+        'ethereum': 'eth',
+        'bsc': 'bsc',
+        'solana': 'solana',
+        'base': 'base',
+        'arbitrum': 'arbitrum',
+        'polygon': 'polygon_pos', 
+        'optimism': 'optimism',
+        'avalanche': 'avax'
+    };
+    
+    const gtChain = chainMap[chainId.toLowerCase()] || chainId;
+    // GeckoTerminal Embed URL: info=0 hides pool info, swaps=0 hides recent trades
+    return `https://www.geckoterminal.com/${gtChain}/pools/${pairAddress}?embed=1&info=0&swaps=0`;
 };
 
 export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => {
@@ -79,14 +100,12 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
             
             try {
                 // 1. Get Market Data (DexScreener)
-                // This gives us Price, Volume, and crucially the PAIR ADDRESS
                 const data = await DatabaseService.getTokenDetails(query);
                 
                 if (data) {
                     setEnrichedData(data);
                     
                     // 2. Fetch Real On-Chain Data (Moralis)
-                    // We pass the Token Address AND the Pair Address so MoralisService can detect Buys/Sells
                     const price = parseFloat(data.priceUsd) || 0;
                     const realActivity = await MoralisService.getTokenActivity(
                         data.baseToken.address, 
@@ -99,7 +118,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         setActivityFeed(realActivity);
                         setIsRealData(true);
                     } else {
-                        // 3. Fallback to Simulation if Moralis returns no data (e.g. very new token or rate limit)
+                        // 3. Fallback to Simulation
                         const vol = data.volume?.h24 || 100000;
                         const sim = generateActivity(vol, price, data.baseToken.symbol);
                         const mappedSim: RealActivity[] = sim.map(s => ({
@@ -137,11 +156,13 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
     }
 
     const currentPrice = enrichedData ? `$${parseFloat(enrichedData.priceUsd).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6})}` : '$0.00';
-    const priceChange = enrichedData ? `${enrichedData.priceChange.h24.toFixed(2)}%` : '0.00%';
-    const isPositive = enrichedData ? enrichedData.priceChange.h24 >= 0 : true;
+    const priceChangeValue = enrichedData?.priceChange?.h24 ?? 0;
+    const priceChange = `${priceChangeValue.toFixed(2)}%`;
+    const isPositive = priceChangeValue >= 0;
+    
     const fdv = enrichedData ? `$${(enrichedData.fdv || 0).toLocaleString()}` : 'N/A';
-    const liq = enrichedData ? `$${(enrichedData.liquidity.usd || 0).toLocaleString()}` : 'N/A';
-    const vol = enrichedData ? `$${(enrichedData.volume.h24 || 0).toLocaleString()}` : 'N/A';
+    const liq = enrichedData ? `$${(enrichedData.liquidity?.usd || 0).toLocaleString()}` : 'N/A';
+    const vol = enrichedData ? `$${(enrichedData.volume?.h24 || 0).toLocaleString()}` : 'N/A';
     const imageUrl = enrichedData?.info?.imageUrl || `https://ui-avatars.com/api/?name=${initialTicker}&background=random`;
 
     return (
@@ -210,15 +231,15 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                         <div className="flex flex-wrap justify-start lg:justify-end gap-2 w-full">
                             {[
-                                { label: '5M', val: enrichedData?.priceChange.m5, pos: (enrichedData?.priceChange.m5 || 0) >= 0 },
-                                { label: '1H', val: enrichedData?.priceChange.h1, pos: (enrichedData?.priceChange.h1 || 0) >= 0 },
-                                { label: '6H', val: enrichedData?.priceChange.h6, pos: (enrichedData?.priceChange.h6 || 0) >= 0 },
-                                { label: '24H', val: enrichedData?.priceChange.h24, pos: (enrichedData?.priceChange.h24 || 0) >= 0 },
+                                { label: '5M', val: enrichedData?.priceChange?.m5, pos: (enrichedData?.priceChange?.m5 || 0) >= 0 },
+                                { label: '1H', val: enrichedData?.priceChange?.h1, pos: (enrichedData?.priceChange?.h1 || 0) >= 0 },
+                                { label: '6H', val: enrichedData?.priceChange?.h6, pos: (enrichedData?.priceChange?.h6 || 0) >= 0 },
+                                { label: '24H', val: enrichedData?.priceChange?.h24, pos: (enrichedData?.priceChange?.h24 || 0) >= 0 },
                             ].map((item, i) => (
                                 <div key={i} className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm flex-1 lg:flex-none`}>
                                     <span className="text-[9px] font-bold text-text-medium uppercase tracking-wider leading-none mb-1">{item.label}</span>
                                     <span className={`text-xs font-bold leading-none ${item.pos ? 'text-primary-green' : 'text-primary-red'}`}>
-                                        {item.val?.toFixed(2)}%
+                                        {item.val !== undefined ? item.val.toFixed(2) : '0.00'}%
                                     </span>
                                 </div>
                             ))}
@@ -227,18 +248,18 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 </div>
             </div>
 
-            {/* 3. Main Content */}
+            {/* 3. Main Content - CHART ONLY */}
             <div className="flex flex-col gap-6">
                 
-                {/* DEXSCREENER EMBED CHART (Ensures perfect match for all pairs/chains) */}
-                <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
-                    <div className="w-full h-[600px] relative">
-                        <iframe 
-                            src={`https://dexscreener.com/${enrichedData?.chainId}/${enrichedData?.pairAddress}?embed=1&theme=dark`} 
-                            style={{ width: '100%', height: '100%', border: '0' }}
-                            title="DexScreener Chart"
-                        ></iframe>
-                    </div>
+                {/* GECKOTERMINAL EMBED CHART (Cleaner, Chart-Only View) */}
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col h-[600px]">
+                    <iframe 
+                        src={getChartUrl(enrichedData?.chainId || 'ethereum', enrichedData?.pairAddress || '')}
+                        style={{ width: '100%', height: '100%', border: '0' }}
+                        title="Token Chart"
+                        allow="clipboard-write"
+                        allowFullScreen
+                    ></iframe>
                 </div>
 
                 {/* Container for Activity & Wallets */}

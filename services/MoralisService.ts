@@ -63,6 +63,12 @@ export const MoralisService = {
      * by comparing against the Liquidity Pair Address from DexScreener.
      */
     getTokenActivity: async (tokenAddress: string, chain: string, pairAddress: string, tokenPrice: number): Promise<RealActivity[]> => {
+        // Validate Token Address
+        if (!tokenAddress || tokenAddress.length < 20) {
+            console.warn("Invalid Token Address for Moralis");
+            return [];
+        }
+
         const isSolana = chain.toLowerCase() === 'solana';
         
         // Select Endpoint
@@ -81,6 +87,12 @@ export const MoralisService = {
                     'X-API-Key': MORALIS_API_KEY
                 }
             });
+
+            // Gracefully handle 404/400 without crashing
+            if (response.status === 404 || response.status === 400) {
+                console.warn(`Moralis data not found for ${tokenAddress} on ${chain}`);
+                return [];
+            }
 
             if (!response.ok) throw new Error(`Moralis API Error: ${response.status} ${response.statusText}`);
             
@@ -147,6 +159,8 @@ export const MoralisService = {
      * Fetches Wallet Balances for the Wallet Tracking Page
      */
     getWalletBalances: async (address: string, chain: string): Promise<WalletBalance[]> => {
+        if (!address) return [];
+
         const isSolana = chain.toLowerCase() === 'solana';
         
         let url = '';
@@ -182,7 +196,8 @@ export const MoralisService = {
                 decimals: t.decimals,
                 balance: t.balance, // Raw balance
                 possible_spam: t.possible_spam,
-                usd_value: t.usd_value || 0, // Requires Price endpoint usually, but balances endpoint often includes it now
+                verified_contract: t.verified_contract,
+                usd_value: t.usd_value,
                 price_usd: t.usd_price || 0
             }));
 

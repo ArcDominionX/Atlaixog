@@ -324,8 +324,8 @@ export const DatabaseService = {
 
             // 4. Transformation & Scoring
             const processedData: MarketCoin[] = filteredPairs.map((pair, index) => {
-                const buys = pair.txns.h24.buys || 0;
-                const sells = pair.txns.h24.sells || 0;
+                const buys = pair.txns?.h24?.buys || 0;
+                const sells = pair.txns?.h24?.sells || 0;
                 const totalTxns = buys + sells;
                 
                 // Net Flow Calculation
@@ -336,8 +336,11 @@ export const DatabaseService = {
 
                 // Smart Signal Logic (Discovery Triggers)
                 let signal: MarketCoin['signal'] = 'None';
-                const priceChangeH1 = pair.priceChange.h1 || 0;
-                const priceChangeH24 = pair.priceChange.h24 || 0;
+                // Safe access to priceChange
+                const priceChangeH1 = pair.priceChange?.h1 || 0;
+                const priceChangeH24 = pair.priceChange?.h24 || 0;
+                const priceChangeH6 = pair.priceChange?.h6 || 0;
+                
                 const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 999;
                 const volToLiq = (pair.volume.h24 / (pair.liquidity?.usd || 1));
 
@@ -360,7 +363,7 @@ export const DatabaseService = {
                     price: formatPrice(pair.priceUsd),
                     h1: `${(priceChangeH1).toFixed(2)}%`,
                     h24: `${(priceChangeH24).toFixed(2)}%`,
-                    d7: `${(pair.priceChange.h6 || 0).toFixed(2)}%`,
+                    d7: `${(priceChangeH6).toFixed(2)}%`,
                     cap: formatCurrency(pair.fdv || pair.liquidity?.usd || 0),
                     liquidity: formatCurrency(pair.liquidity?.usd || 0),
                     volume24h: formatCurrency(pair.volume.h24),
