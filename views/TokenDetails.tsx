@@ -56,22 +56,11 @@ const generateActivity = (volume24h: number, price: number, ticker: string) => {
     return activities.sort((a, b) => parseInt(a.time) - parseInt(b.time));
 };
 
-// Helper to map chains for Chart Provider (GeckoTerminal)
+// Helper to map chains for Chart Provider (DexScreener)
 const getChartUrl = (chainId: string, pairAddress: string) => {
-    const chainMap: Record<string, string> = {
-        'ethereum': 'eth',
-        'bsc': 'bsc',
-        'solana': 'solana',
-        'base': 'base',
-        'arbitrum': 'arbitrum',
-        'polygon': 'polygon_pos', 
-        'optimism': 'optimism',
-        'avalanche': 'avax'
-    };
-    
-    const gtChain = chainMap[chainId.toLowerCase()] || chainId;
-    // GeckoTerminal Embed URL: info=0 hides pool info, swaps=0 hides recent trades
-    return `https://www.geckoterminal.com/${gtChain}/pools/${pairAddress}?embed=1&info=0&swaps=0`;
+    // DexScreener Embed URL
+    // chains from DexScreener API are usually compatible directly (e.g. 'solana', 'ethereum', 'base')
+    return `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&theme=dark&trades=0&info=0`;
 };
 
 export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => {
@@ -98,7 +87,10 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            const query = typeof token === 'string' ? token : token.baseToken?.address || token.ticker;
+            // Prioritize Pair Address (most accurate), then Token Address, then Ticker
+            const query = typeof token === 'string' 
+                ? token 
+                : token.pairAddress || token.address || token.ticker;
             
             try {
                 // 1. Get Market Data (DexScreener)
@@ -253,11 +245,15 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
             {/* 3. Main Content - CHART ONLY */}
             <div className="flex flex-col gap-6">
                 
-                {/* GECKOTERMINAL EMBED CHART (Cleaner, Chart-Only View) */}
-                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col h-[600px]">
+                {/* DEXSCREENER EMBED CHART (Live Data) */}
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col h-[600px] relative">
+                    {/* Add a loading skeleton or background */}
+                    <div className="absolute inset-0 bg-main z-0 flex items-center justify-center text-text-medium">
+                        Loading Chart...
+                    </div>
                     <iframe 
                         src={getChartUrl(enrichedData?.chainId || 'ethereum', enrichedData?.pairAddress || '')}
-                        style={{ width: '100%', height: '100%', border: '0' }}
+                        style={{ width: '100%', height: '100%', border: '0', position: 'relative', zIndex: 10 }}
                         title="Token Chart"
                         allow="clipboard-write"
                         allowFullScreen

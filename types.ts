@@ -52,6 +52,8 @@ export interface MarketCoin {
   img: string;
   trend: 'Bullish' | 'Bearish';
   chain: string;
+  address?: string;     // Token Contract Address
+  pairAddress?: string; // Liquidity Pair Address (Critical for charts)
 }
 
 export interface Post {

@@ -255,7 +255,9 @@ export const DatabaseService = {
                     createdTimestamp: pair.pairCreatedAt || Date.now(),
                     img: img,
                     trend,
-                    chain: getChainId(pair.chainId)
+                    chain: getChainId(pair.chainId),
+                    address: pair.baseToken.address, // Populate address
+                    pairAddress: pair.pairAddress    // Populate pairAddress for accurate charting
                 };
             });
 
