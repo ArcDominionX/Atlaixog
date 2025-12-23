@@ -41,192 +41,6 @@ const TARGET_QUERIES = [
     'JUP', 'RAY', 'JITO', 'PYTH', 'RENDER', 'TAO', 'ONDO', 'PENDLE', 'ENA', 'AERO', 'PRIME'
 ];
 
-// --- FALLBACK DATA (Diverse Chains - 40 Items for robust list) ---
-const FALLBACK_DATA: MarketCoin[] = [
-    // --- MEME / VIRAL ---
-    {
-        id: 101, name: 'Brett', ticker: 'BRETT', price: '$0.0452', h1: '+2.5%', h24: '+15.2%', d7: '+42.4%',
-        cap: '$450M', liquidity: '$12M', volume24h: '$45M', dexBuys: '15200', dexSells: '8400', dexFlow: 85,
-        netFlow: '+$5.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Low',
-        age: '3 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x532f27101965dd16442e59d40670faf5ebb1428f.png', trend: 'Bullish', chain: 'base'
-    },
-    {
-        id: 102, name: 'Dogwifhat', ticker: 'WIF', price: '$2.45', h1: '+1.2%', h24: '+8.4%', d7: '+45.2%',
-        cap: '$2.4B', liquidity: '$25M', volume24h: '$450M', dexBuys: '8500', dexSells: '4200', dexFlow: 92,
-        netFlow: '+$12.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Medium',
-        age: '4 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 103, name: 'Popcat', ticker: 'POPCAT', price: '$0.45', h1: '+5.1%', h24: '+22.4%', d7: '+80.1%',
-        cap: '$450M', liquidity: '$8M', volume24h: '$25M', dexBuys: '12000', dexSells: '8000', dexFlow: 88,
-        netFlow: '+$4.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'Medium',
-        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 104, name: 'Mog Coin', ticker: 'MOG', price: '$0.0000012', h1: '-1.2%', h24: '+5.4%', d7: '+12.1%',
-        cap: '$380M', liquidity: '$5M', volume24h: '$12M', dexBuys: '5200', dexSells: '4100', dexFlow: 65,
-        netFlow: '+$1.2M', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Low',
-        age: '8 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xaaee1a9723aadb7af9e81c990103c0af1359de33.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 105, name: 'Pepe', ticker: 'PEPE', price: '$0.000011', h1: '+0.5%', h24: '-2.1%', d7: '+5.5%',
-        cap: '$4.2B', liquidity: '$45M', volume24h: '$350M', dexBuys: '25000', dexSells: '28000', dexFlow: 48,
-        netFlow: '-$5.5M', smartMoney: 'Outflow', smartMoneySignal: 'Outflow', signal: 'None', riskLevel: 'Low',
-        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x6982508145454ce325ddbe47a25d4ec3d2311933.png', trend: 'Bearish', chain: 'ethereum'
-    },
-    {
-        id: 106, name: 'Bonk', ticker: 'BONK', price: '$0.000024', h1: '+3.2%', h24: '+10.5%', d7: '+25.2%',
-        cap: '$1.6B', liquidity: '$18M', volume24h: '$120M', dexBuys: '18000', dexSells: '12000', dexFlow: 75,
-        netFlow: '+$8.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
-        age: '1.5 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/dezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 107, name: 'Goatseus Maximus', ticker: 'GOAT', price: '$0.42', h1: '+8.5%', h24: '+35.2%', d7: '+150%',
-        cap: '$420M', liquidity: '$6M', volume24h: '$85M', dexBuys: '22000', dexSells: '15000', dexFlow: 82,
-        netFlow: '+$12M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'High',
-        age: '2 weeks', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 108, name: 'Peanut the Squirrel', ticker: 'PNUT', price: '$0.85', h1: '-5.2%', h24: '+12.5%', d7: '+85%',
-        cap: '$850M', liquidity: '$15M', volume24h: '$250M', dexBuys: '45000', dexSells: '38000', dexFlow: 55,
-        netFlow: '+$2.5M', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'Accumulation', riskLevel: 'High',
-        age: '1 week', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 109, name: 'Act I', ticker: 'ACT', price: '$0.52', h1: '+12.5%', h24: '+45.2%', d7: '+220%',
-        cap: '$520M', liquidity: '$8M', volume24h: '$150M', dexBuys: '32000', dexSells: '18000', dexFlow: 88,
-        netFlow: '+$18M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'High',
-        age: '3 weeks', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/GJAFwWjJ3vnTsrQVabjBVK2TYB1YtRCQXRDfDgUnpump.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 110, name: 'Simon\'s Cat', ticker: 'CAT', price: '$0.000045', h1: '+1.2%', h24: '-5.4%', d7: '+12.5%',
-        cap: '$280M', liquidity: '$12M', volume24h: '$25M', dexBuys: '4500', dexSells: '5200', dexFlow: 42,
-        netFlow: '-$500K', smartMoney: 'Outflow', smartMoneySignal: 'Outflow', signal: 'None', riskLevel: 'Medium',
-        age: '2 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/bsc/0x6894cde390a3f51155ea41ed24a33a4827d3063d.png', trend: 'Bearish', chain: 'bsc'
-    },
-    {
-        id: 111, name: 'SPX6900', ticker: 'SPX', price: '$0.72', h1: '+1.5%', h24: '+18.4%', d7: '+65.2%',
-        cap: '$680M', liquidity: '$14M', volume24h: '$65M', dexBuys: '14200', dexSells: '6100', dexFlow: 89,
-        netFlow: '+$8.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Low',
-        age: '5 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x0000000000000000000000000000000000000000.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 112, name: 'Gigachad', ticker: 'GIGA', price: '$0.048', h1: '-2.1%', h24: '+5.6%', d7: '+25.1%',
-        cap: '$480M', liquidity: '$8M', volume24h: '$12M', dexBuys: '6500', dexSells: '5200', dexFlow: 62,
-        netFlow: '+$1.1M', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Medium',
-        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/63LfDmNb3MQ8mw9MtZ2To9bEA2M71kZUUGq5tiJxcqj9.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 113, name: 'Fwog', ticker: 'FWOG', price: '$0.15', h1: '+4.2%', h24: '+28.4%', d7: '+95.2%',
-        cap: '$150M', liquidity: '$4M', volume24h: '$25M', dexBuys: '9500', dexSells: '3200', dexFlow: 85,
-        netFlow: '+$4.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'High',
-        age: '3 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/A8C3xuqscfmyLrte3VmTqviyxwMAa8QMxcRktitzpump.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 114, name: 'Cat in a Dogs World', ticker: 'MEW', price: '$0.0085', h1: '-0.5%', h24: '+2.4%', d7: '+15.2%',
-        cap: '$750M', liquidity: '$18M', volume24h: '$85M', dexBuys: '15000', dexSells: '14200', dexFlow: 52,
-        netFlow: '+$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Low',
-        age: '5 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREnz3bVLha.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 115, name: 'Virtual Protocol', ticker: 'VIRTUAL', price: '$1.25', h1: '+8.5%', h24: '+42.1%', d7: '+180%',
-        cap: '$1.2B', liquidity: '$25M', volume24h: '$150M', dexBuys: '25000', dexSells: '12000', dexFlow: 92,
-        netFlow: '+$25M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
-        age: '4 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b.png', trend: 'Bullish', chain: 'base'
-    },
-    {
-        id: 116, name: 'Turbo', ticker: 'TURBO', price: '$0.0065', h1: '-1.5%', h24: '-5.2%', d7: '+8.4%',
-        cap: '$450M', liquidity: '$12M', volume24h: '$35M', dexBuys: '8200', dexSells: '9500', dexFlow: 45,
-        netFlow: '-$1.5M', smartMoney: 'Outflow', smartMoneySignal: 'Outflow', signal: 'None', riskLevel: 'Medium',
-        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xa35923162c49cf95e6bf26623385eb431ad920d3.png', trend: 'Bearish', chain: 'ethereum'
-    },
-    {
-        id: 117, name: 'Neiro Ethereum', ticker: 'NEIRO', price: '$0.18', h1: '+2.5%', h24: '+15.4%', d7: '+55.2%',
-        cap: '$180M', liquidity: '$5M', volume24h: '$45M', dexBuys: '12500', dexSells: '8200', dexFlow: 78,
-        netFlow: '+$6.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'High',
-        age: '3 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xee2a03aa6dacf51c18679c516ad5283d8e7c2637.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 118, name: 'Degen', ticker: 'DEGEN', price: '$0.012', h1: '+0.5%', h24: '+3.2%', d7: '+12.5%',
-        cap: '$180M', liquidity: '$8M', volume24h: '$15M', dexBuys: '4200', dexSells: '3800', dexFlow: 55,
-        netFlow: '+$250K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Medium',
-        age: '8 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x4ed4e862860bed51a9570b96d89af5e1b0efefed.png', trend: 'Bullish', chain: 'base'
-    },
-    {
-        id: 119, name: 'Official Trump', ticker: 'TRUMP', price: '$4.50', h1: '+1.2%', h24: '-2.5%', d7: '+15.4%',
-        cap: '$220M', liquidity: '$6M', volume24h: '$18M', dexBuys: '5200', dexSells: '5800', dexFlow: 48,
-        netFlow: '-$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'High',
-        age: '4 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/6p6xgHyF7AeE6TZkSmFsko444wqS4dfJohnson.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 120, name: 'Melania Meme', ticker: 'MELANIA', price: '$0.025', h1: '+15.2%', h24: '+85.4%', d7: '+250%',
-        cap: '$85M', liquidity: '$2M', volume24h: '$35M', dexBuys: '12000', dexSells: '4500', dexFlow: 95,
-        netFlow: '+$8.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'High',
-        age: '1 week', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/FU1q8vJpZNURmBzJkY55.png', trend: 'Bullish', chain: 'solana'
-    },
-    // --- DEFI / INFRA / L2 (ADDED) ---
-    {
-        id: 121, name: 'Jupiter', ticker: 'JUP', price: '$1.05', h1: '+0.5%', h24: '+2.4%', d7: '+12.5%',
-        cap: '$1.4B', liquidity: '$45M', volume24h: '$120M', dexBuys: '18000', dexSells: '15000', dexFlow: 65,
-        netFlow: '+$2.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Low',
-        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/JUPyiwrYJFskUPiHa7hkeR8VUtkPHCLkdPtfVZUX2ht.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 122, name: 'Raydium', ticker: 'RAY', price: '$2.15', h1: '+1.2%', h24: '+5.4%', d7: '+18.5%',
-        cap: '$580M', liquidity: '$25M', volume24h: '$45M', dexBuys: '8500', dexSells: '4200', dexFlow: 75,
-        netFlow: '+$4.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Low',
-        age: '2 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 123, name: 'Render', ticker: 'RENDER', price: '$7.85', h1: '-0.5%', h24: '+3.2%', d7: '+15.4%',
-        cap: '$3.2B', liquidity: '$55M', volume24h: '$150M', dexBuys: '25000', dexSells: '22000', dexFlow: 55,
-        netFlow: '+$1.5M', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Low',
-        age: '3 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/solana/rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof.png', trend: 'Bullish', chain: 'solana'
-    },
-    {
-        id: 124, name: 'Ondo Finance', ticker: 'ONDO', price: '$1.25', h1: '+0.8%', h24: '+4.5%', d7: '+22.1%',
-        cap: '$1.8B', liquidity: '$35M', volume24h: '$85M', dexBuys: '12000', dexSells: '8000', dexFlow: 68,
-        netFlow: '+$3.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Low',
-        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xfaba6f8e4a5e8ab82f62fe7c39859fae6720f356.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 125, name: 'Pendle', ticker: 'PENDLE', price: '$4.50', h1: '+2.1%', h24: '+8.5%', d7: '+35.2%',
-        cap: '$1.2B', liquidity: '$28M', volume24h: '$65M', dexBuys: '9500', dexSells: '5200', dexFlow: 72,
-        netFlow: '+$5.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
-        age: '2 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x808507121b80c02388fad14726482e061b8da827.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 126, name: 'Aerodrome', ticker: 'AERO', price: '$1.15', h1: '+3.5%', h24: '+12.4%', d7: '+45.1%',
-        cap: '$650M', liquidity: '$45M', volume24h: '$85M', dexBuys: '15000', dexSells: '8000', dexFlow: 82,
-        netFlow: '+$8.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Volume Spike', riskLevel: 'Medium',
-        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x940181a94a35a4569e4529a3cdfb74e38fd98631.png', trend: 'Bullish', chain: 'base'
-    },
-    {
-        id: 127, name: 'Ethena', ticker: 'ENA', price: '$0.85', h1: '-1.2%', h24: '+2.5%', d7: '+10.4%',
-        cap: '$1.5B', liquidity: '$42M', volume24h: '$95M', dexBuys: '18000', dexSells: '16000', dexFlow: 52,
-        netFlow: '+$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'Medium',
-        age: '6 months', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x57e114b691db790c35207b2e685d4a43181e6061.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 128, name: 'Bittensor', ticker: 'TAO', price: '$350.00', h1: '+1.5%', h24: '+5.2%', d7: '+25.1%',
-        cap: '$3.5B', liquidity: '$15M', volume24h: '$45M', dexBuys: '5200', dexSells: '4100', dexFlow: 62,
-        netFlow: '+$2.5M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Accumulation', riskLevel: 'Medium',
-        age: '1.5 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x77e06c9eccf2e797fd462a92b6d7642ef85b0a44.png', trend: 'Bullish', chain: 'ethereum'
-    },
-    {
-        id: 129, name: 'Prime', ticker: 'PRIME', price: '$12.50', h1: '+2.5%', h24: '+8.4%', d7: '+15.2%',
-        cap: '$450M', liquidity: '$12M', volume24h: '$25M', dexBuys: '4500', dexSells: '3200', dexFlow: 65,
-        netFlow: '+$1.2M', smartMoney: 'Inflow', smartMoneySignal: 'Inflow', signal: 'Breakout', riskLevel: 'Medium',
-        age: '1 year', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/base/0x09d905c378b9d37255f9730f065360372f6a7d5b.png', trend: 'Bullish', chain: 'base'
-    },
-    {
-        id: 130, name: 'HarryPotterObama...', ticker: 'BITCOIN', price: '$0.15', h1: '-2.5%', h24: '+5.2%', d7: '+35.4%',
-        cap: '$150M', liquidity: '$8M', volume24h: '$15M', dexBuys: '3500', dexSells: '2800', dexFlow: 58,
-        netFlow: '+$500K', smartMoney: 'Neutral', smartMoneySignal: 'Neutral', signal: 'None', riskLevel: 'High',
-        age: '1.5 years', createdTimestamp: Date.now(), img: 'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x72e4f9f808c49a2a61de9c5896298920dc4eeea9.png', trend: 'Bullish', chain: 'ethereum'
-    }
-];
-
 // Helpers
 const formatCurrency = (value: number) => {
     if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
@@ -464,15 +278,7 @@ export const DatabaseService = {
                 return scoreB - scoreA;
             });
 
-            // Fallback Logic: Ensure at least 20 items if API yields few results
-            // If live data is < 20, append unique fallback items to fill the list
-            let finalData = sortedData;
-            if (finalData.length < 20) {
-                 const fallbackNeeded = 20 - finalData.length;
-                 const extraItems = FALLBACK_DATA.filter(fb => !finalData.some(d => d.ticker === fb.ticker)).slice(0, fallbackNeeded);
-                 finalData = [...finalData, ...extraItems];
-            }
-
+            const finalData = sortedData;
             cache.marketData = { data: finalData, timestamp: Date.now() };
 
             return {
@@ -482,8 +288,9 @@ export const DatabaseService = {
             };
 
         } catch (error) {
-            console.error("Critical: All data sources failed, using fallback.", error);
-            return { data: FALLBACK_DATA, source: 'CACHE', latency: 0 };
+            console.error("Critical: All data sources failed.", error);
+            // Return empty array if API fails, as requested
+            return { data: [], source: 'CACHE', latency: 0 };
         }
     },
 

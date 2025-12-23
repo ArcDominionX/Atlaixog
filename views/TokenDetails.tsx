@@ -51,7 +51,9 @@ const generateActivity = (volume24h: number, price: number, ticker: string) => {
             tag: walletTypes[Math.floor(Math.random() * walletTypes.length)]
         });
     }
-    return activities;
+
+    // Sort by time (newest/lowest timeAgo first)
+    return activities.sort((a, b) => parseInt(a.time) - parseInt(b.time));
 };
 
 // Helper to map chains for Chart Provider (GeckoTerminal)
@@ -310,7 +312,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                         <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
                                         <th className="pb-4 font-bold w-[25%]">Amount</th>
                                         <th className="pb-4 font-bold w-[15%]">Time</th>
-                                        <th className="pb-4 font-bold w-[25%]">Wallet / Tag</th>
+                                        <th className="pb-4 font-bold w-[25%]">Wallet</th>
                                         <th className="pb-4 text-right pr-2 font-bold w-[20%]">Track</th>
                                     </tr>
                                 </thead>
@@ -331,7 +333,6 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                                     <span className="font-mono text-primary-blue cursor-pointer hover:underline text-xs">
                                                         {row.wallet.slice(0, 6)}...{row.wallet.slice(-4)}
                                                     </span>
-                                                    <span className="text-[9px] text-text-medium">{row.tag}</span>
                                                 </div>
                                             </td>
                                             <td className="py-4 text-right pr-2">
