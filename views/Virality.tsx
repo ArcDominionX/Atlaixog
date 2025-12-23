@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Flame, Search, Check } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 // Declare ApexCharts
 declare var ApexCharts: any;
@@ -158,33 +159,6 @@ export const Virality: React.FC = () => {
 
                 {/* Right Column */}
                 <div className="flex flex-col gap-6">
-
-                    {/* Probability Card - RESTORED */}
-                    <div className="bg-card border border-primary-green/50 rounded-2xl p-6 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <Flame size={120} />
-                        </div>
-                        <div className="relative z-10">
-                            <h3 className="text-xl md:text-2xl font-bold mb-4 leading-tight">
-                                <span className="text-primary-green">92% chance</span> this token will go <span className="text-primary-green">VIRAL</span> in the next 24 hours
-                            </h3>
-                            <div className="space-y-3">
-                                {[
-                                    'Extremely High social velocity',
-                                    'High meme activity',
-                                    'Very High KOL amplification',
-                                    'Solana memes narrative trending'
-                                ].map((item, i) => (
-                                    <div key={i} className="flex items-center gap-3 text-sm font-medium text-text-light">
-                                        <div className="w-5 h-5 rounded-full bg-primary-green/20 flex items-center justify-center shrink-0">
-                                            <Check size={12} className="text-primary-green" strokeWidth={3} />
-                                        </div>
-                                        {item}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
                     
                     {/* Narrative Map */}
                     <div className="bg-card border border-border rounded-2xl p-6">

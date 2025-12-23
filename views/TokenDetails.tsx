@@ -1,105 +1,148 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Globe, Twitter, Send, ExternalLink, Scan, Zap, Wallet, Bell, Radar } from 'lucide-react';
+import { ArrowLeft, Copy, Globe, Twitter, Send, ExternalLink, Scan, Zap, Wallet, Bell, Radar, RefreshCw, AlertCircle } from 'lucide-react';
 import { MarketCoin } from '../types';
+import { DatabaseService } from '../services/DatabaseService';
+import { MoralisService, RealActivity } from '../services/MoralisService';
 
 interface TokenDetailsProps {
     token: MarketCoin | string;
     onBack: () => void;
 }
 
-declare global {
-    interface Window {
-        TradingView: any;
-    }
+interface EnrichedTokenData {
+    pairAddress: string;
+    baseToken: { address: string; name: string; symbol: string };
+    priceUsd: string;
+    liquidity: { usd: number };
+    fdv: number;
+    volume: { h24: number; m5: number; h1: number; h6: number };
+    priceChange: { m5: number; h1: number; h6: number; h24: number };
+    info: { imageUrl?: string; websites?: any[]; socials?: any[] };
+    chainId: string;
+    dexId: string;
+    url: string;
 }
+
+// SIMULATION HELPER: Fallback if Moralis Data is empty or fails
+const generateActivity = (volume24h: number, price: number, ticker: string) => {
+    const activities = [];
+    const walletTypes = ['Smart Money', 'Whale', 'Bot', 'Fresh Wallet'];
+
+    for (let i = 0; i < 8; i++) {
+        const isBuy = Math.random() > 0.45;
+        const usdValue = Math.random() * (volume24h / 1000); 
+        const tokenAmount = usdValue / price;
+        const timeAgo = Math.floor(Math.random() * 60);
+        const walletAddr = `0x${Math.random().toString(16).substr(2, 4)}...${Math.random().toString(16).substr(2, 3)}`;
+
+        activities.push({
+            type: isBuy ? 'Buy' : 'Sell',
+            val: `${tokenAmount.toFixed(2)}`,
+            desc: isBuy ? `bought on DEX` : `sold on DEX`,
+            time: `${timeAgo + 1}m ago`,
+            color: isBuy ? 'text-primary-green' : 'text-primary-red',
+            usd: `$${usdValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`,
+            hash: '0x...',
+            wallet: walletAddr,
+            tag: walletTypes[Math.floor(Math.random() * walletTypes.length)]
+        });
+    }
+    return activities;
+};
 
 export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => {
     const [copied, setCopied] = useState(false);
-    const widgetRef = useRef<HTMLDivElement>(null);
+    const [enrichedData, setEnrichedData] = useState<EnrichedTokenData | null>(null);
+    const [loading, setLoading] = useState(true);
+    
+    // Unified State for Activity (Real or Simulated)
+    const [activityFeed, setActivityFeed] = useState<RealActivity[]>([]);
+    const [isRealData, setIsRealData] = useState(false);
 
-    // Normalize Token Data
-    const tokenName = typeof token === 'string' ? token : token.name;
-    const tokenTicker = typeof token === 'string' ? token.toUpperCase() : token.ticker;
-    const tokenPrice = typeof token === 'string' ? '$0.00' : token.price;
-    const tokenChange = typeof token === 'string' ? '+0.00%' : token.h24;
-    const isPositive = tokenChange.includes('+');
-    const tokenImg = typeof token === 'object' ? token.img : `https://ui-avatars.com/api/?name=${tokenName}&background=random`;
+    // Initial Token Info
+    const initialTicker = typeof token === 'string' ? token : token.ticker;
 
     const handleCopy = () => {
-        navigator.clipboard.writeText('0xC02aa...56cz');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (enrichedData?.baseToken.address) {
+            navigator.clipboard.writeText(enrichedData.baseToken.address);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
     };
 
-    // Helper to map ticker to a valid TradingView symbol
-    const getTradingViewSymbol = (ticker: string) => {
-        const t = ticker.toUpperCase();
-        const map: Record<string, string> = {
-            'BTC': 'BINANCE:BTCUSDT',
-            'ETH': 'BINANCE:ETHUSDT',
-            'SOL': 'BINANCE:SOLUSDT',
-            'BONK': 'BINANCE:BONKUSDT',
-            'WIF': 'KUCOIN:WIFUSDT',
-            'AVAX': 'BINANCE:AVAXUSDT',
-            'BNB': 'BINANCE:BNBUSDT',
-            'XRP': 'BINANCE:XRPUSDT',
-            'ADA': 'BINANCE:ADAUSDT',
-            'DOGE': 'BINANCE:DOGEUSDT',
-            'DOT': 'BINANCE:DOTUSDT'
-        };
-        return map[t] || 'BINANCE:BTCUSDT'; // Default fallback
-    };
-
-    // Initialize TradingView Widget
+    // FETCH DATA
     useEffect(() => {
-        const scriptId = 'tradingview-widget-script';
-        const containerId = 'tradingview_widget';
-
-        const initWidget = () => {
-            if (window.TradingView && widgetRef.current) {
-                // Clear previous widget if exists
-                widgetRef.current.innerHTML = ""; 
+        const fetchData = async () => {
+            setLoading(true);
+            const query = typeof token === 'string' ? token : token.baseToken?.address || token.ticker;
+            
+            try {
+                // 1. Get Market Data (DexScreener)
+                // This gives us Price, Volume, and crucially the PAIR ADDRESS
+                const data = await DatabaseService.getTokenDetails(query);
                 
-                new window.TradingView.widget({
-                    "width": "100%",
-                    "height": 500,
-                    "symbol": getTradingViewSymbol(tokenTicker),
-                    "interval": "15",
-                    "timezone": "Etc/UTC",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "en",
-                    "enable_publishing": false,
-                    "backgroundColor": "#1C1F22",
-                    "gridColor": "#2A2E33",
-                    "hide_top_toolbar": false,
-                    "hide_legend": false,
-                    "save_image": false,
-                    "container_id": containerId,
-                    "toolbar_bg": "#1C1F22",
-                    "withdateranges": true,
-                    "hide_side_toolbar": false,
-                    "allow_symbol_change": true,
-                    "details": false,
-                    "hotlist": false,
-                    "calendar": false,
-                });
+                if (data) {
+                    setEnrichedData(data);
+                    
+                    // 2. Fetch Real On-Chain Data (Moralis)
+                    // We pass the Token Address AND the Pair Address so MoralisService can detect Buys/Sells
+                    const price = parseFloat(data.priceUsd) || 0;
+                    const realActivity = await MoralisService.getTokenActivity(
+                        data.baseToken.address, 
+                        data.chainId, 
+                        data.pairAddress, 
+                        price
+                    );
+
+                    if (realActivity && realActivity.length > 0) {
+                        setActivityFeed(realActivity);
+                        setIsRealData(true);
+                    } else {
+                        // 3. Fallback to Simulation if Moralis returns no data (e.g. very new token or rate limit)
+                        const vol = data.volume?.h24 || 100000;
+                        const sim = generateActivity(vol, price, data.baseToken.symbol);
+                        const mappedSim: RealActivity[] = sim.map(s => ({
+                            type: s.type as any,
+                            val: s.val,
+                            desc: s.desc,
+                            time: s.time,
+                            color: s.color,
+                            usd: s.usd,
+                            hash: s.hash,
+                            wallet: s.wallet,
+                            tag: s.tag
+                        }));
+                        setActivityFeed(mappedSim);
+                        setIsRealData(false);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch details", e);
+            } finally {
+                setLoading(false);
             }
         };
 
-        // Check if script already exists
-        if (!document.getElementById(scriptId)) {
-            const script = document.createElement('script');
-            script.id = scriptId;
-            script.src = 'https://s3.tradingview.com/tv.js';
-            script.async = true;
-            script.onload = initWidget;
-            document.head.appendChild(script);
-        } else {
-            initWidget();
-        }
-    }, [tokenTicker]);
+        fetchData();
+    }, [token]);
+
+    if (loading && !enrichedData) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                 <RefreshCw className="animate-spin text-primary-green mb-4" size={40} />
+                 <div className="text-xl font-bold">Scanning Chain Data...</div>
+            </div>
+        );
+    }
+
+    const currentPrice = enrichedData ? `$${parseFloat(enrichedData.priceUsd).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6})}` : '$0.00';
+    const priceChange = enrichedData ? `${enrichedData.priceChange.h24.toFixed(2)}%` : '0.00%';
+    const isPositive = enrichedData ? enrichedData.priceChange.h24 >= 0 : true;
+    const fdv = enrichedData ? `$${(enrichedData.fdv || 0).toLocaleString()}` : 'N/A';
+    const liq = enrichedData ? `$${(enrichedData.liquidity.usd || 0).toLocaleString()}` : 'N/A';
+    const vol = enrichedData ? `$${(enrichedData.volume.h24 || 0).toLocaleString()}` : 'N/A';
+    const imageUrl = enrichedData?.info?.imageUrl || `https://ui-avatars.com/api/?name=${initialTicker}&background=random`;
 
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
@@ -110,75 +153,72 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
 
             {/* 2. Top Section */}
             <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-6">
-                <div className="flex flex-col md:flex-row justify-between gap-6">
+                <div className="flex flex-col lg:flex-row justify-between gap-6">
                     {/* Left: Identity */}
                     <div className="flex gap-4 md:gap-5">
-                        <img src={tokenImg} className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-border shadow-lg" onError={(e) => e.currentTarget.src='https://via.placeholder.com/64'} />
+                        <img src={imageUrl} className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-border shadow-lg" onError={(e) => e.currentTarget.src='https://via.placeholder.com/64'} />
                         <div className="flex flex-col justify-center">
                             <div className="flex items-center gap-3 flex-wrap">
-                                <h1 className="text-2xl md:text-3xl font-extrabold text-text-light tracking-tight">{tokenName}</h1>
-                                <span className="text-lg md:text-xl font-mono text-text-medium font-semibold">{tokenTicker}</span>
-                                <span className="bg-[#2F80ED]/10 text-[#2F80ED] text-[10px] font-bold px-2.5 py-1 rounded border border-[#2F80ED]/30 uppercase tracking-wide">Ethereum</span>
+                                <h1 className="text-2xl md:text-3xl font-extrabold text-text-light tracking-tight">{enrichedData?.baseToken.name}</h1>
+                                <span className="text-lg md:text-xl font-mono text-text-medium font-semibold">{enrichedData?.baseToken.symbol}</span>
+                                <span className="bg-[#2F80ED]/10 text-[#2F80ED] text-[10px] font-bold px-2.5 py-1 rounded border border-[#2F80ED]/30 uppercase tracking-wide">{enrichedData?.chainId}</span>
                             </div>
                             <div className="flex items-center gap-4 mt-2.5 flex-wrap">
                                 <div 
                                     className="flex items-center gap-2 bg-main px-3 py-1.5 rounded-lg border border-border cursor-pointer hover:border-text-medium transition-colors group" 
                                     onClick={handleCopy}
                                 >
-                                    <span className="font-mono text-xs text-text-medium group-hover:text-text-light transition-colors">0xC02aa...56cz</span>
+                                    <span className="font-mono text-xs text-text-medium group-hover:text-text-light transition-colors">
+                                        {enrichedData?.baseToken.address.slice(0, 6)}...{enrichedData?.baseToken.address.slice(-4)}
+                                    </span>
                                     <Copy size={12} className="text-text-medium group-hover:text-text-light" />
                                     {copied && <span className="text-primary-green text-[10px] font-bold animate-fade-in">Copied</span>}
                                 </div>
                                 <div className="flex gap-2">
-                                    <a href="#" className="w-8 h-8 flex items-center justify-center rounded-lg bg-border/50 text-text-medium hover:bg-card-hover hover:text-white transition-all"><Globe size={16} /></a>
-                                    <a href="#" className="w-8 h-8 flex items-center justify-center rounded-lg bg-border/50 text-text-medium hover:bg-card-hover hover:text-[#1DA1F2] transition-all"><Twitter size={16} /></a>
-                                    <a href="#" className="w-8 h-8 flex items-center justify-center rounded-lg bg-border/50 text-text-medium hover:bg-card-hover hover:text-[#0088cc] transition-all"><Send size={16} /></a>
+                                    {enrichedData?.info?.websites?.map((w, i) => (
+                                         <a key={i} href={w.url} target="_blank" className="w-8 h-8 flex items-center justify-center rounded-lg bg-border/50 text-text-medium hover:bg-card-hover hover:text-white transition-all"><Globe size={16} /></a>
+                                    ))}
+                                    {enrichedData?.info?.socials?.map((s, i) => (
+                                         <a key={i} href={s.url} target="_blank" className="w-8 h-8 flex items-center justify-center rounded-lg bg-border/50 text-text-medium hover:bg-card-hover hover:text-white transition-all capitalize" title={s.type}>{s.type === 'twitter' ? <Twitter size={16} /> : <Send size={16} />}</a>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Right: Price, Stats & Performance (Organized vertically) */}
-                    <div className="flex flex-col items-start md:items-end justify-center w-full md:w-auto gap-4">
-                        
-                        {/* 1. Price Header */}
+                    {/* Right: Price, Stats & Performance */}
+                    <div className="flex flex-col items-start lg:items-end justify-center w-full lg:w-auto gap-4">
                         <div className="flex items-baseline gap-3">
-                            <div className="text-3xl md:text-4xl font-extrabold text-text-light tracking-tight">{tokenPrice}</div>
+                            <div className="text-3xl md:text-4xl font-extrabold text-text-light tracking-tight">{currentPrice}</div>
                             <div className={`text-base md:text-lg font-bold px-2 py-0.5 rounded ${isPositive ? 'text-primary-green bg-primary-green/10' : 'text-primary-red bg-primary-red/10'}`}>
-                                {tokenChange}
+                                {priceChange}
                             </div>
                         </div>
-                        
-                        {/* 2. Key Market Stats */}
-                        <div className="flex flex-wrap justify-start md:justify-end gap-x-8 gap-y-2 w-full">
-                            <div className="flex flex-col items-start md:items-end">
-                                <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Market Cap</span>
-                                <span className="text-sm font-bold text-text-light">$410.2B</span>
+                        <div className="flex flex-wrap justify-start lg:justify-end gap-x-8 gap-y-2 w-full">
+                            <div className="flex flex-col items-start lg:items-end">
+                                <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">FDV (MCap)</span>
+                                <span className="text-sm font-bold text-text-light">{fdv}</span>
                             </div>
-                            <div className="flex flex-col items-start md:items-end">
+                            <div className="flex flex-col items-start lg:items-end">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Liquidity</span>
-                                <span className="text-sm font-bold text-text-light">$482.6M</span>
+                                <span className="text-sm font-bold text-text-light">{liq}</span>
                             </div>
-                            <div className="flex flex-col items-start md:items-end">
+                            <div className="flex flex-col items-start lg:items-end">
                                 <span className="text-[10px] font-bold text-text-medium uppercase tracking-wider">Volume (24h)</span>
-                                <span className="text-sm font-bold text-text-light">$670M</span>
+                                <span className="text-sm font-bold text-text-light">{vol}</span>
                             </div>
                         </div>
-
-                        {/* 3. Performance Metrics */}
-                        <div className="flex flex-wrap justify-start md:justify-end gap-2 w-full">
+                        <div className="flex flex-wrap justify-start lg:justify-end gap-2 w-full">
                             {[
-                                { label: '30M', val: '-0.45%', pos: false },
-                                { label: '1H', val: '-16.0%', pos: false },
-                                { label: '6H', val: '-5.3%', pos: false },
-                                { label: '24H', val: '+22.3%', pos: true },
-                                { label: '7D', val: '+12.4%', pos: true },
-                                { label: '30D', val: '+145%', pos: true },
+                                { label: '5M', val: enrichedData?.priceChange.m5, pos: (enrichedData?.priceChange.m5 || 0) >= 0 },
+                                { label: '1H', val: enrichedData?.priceChange.h1, pos: (enrichedData?.priceChange.h1 || 0) >= 0 },
+                                { label: '6H', val: enrichedData?.priceChange.h6, pos: (enrichedData?.priceChange.h6 || 0) >= 0 },
+                                { label: '24H', val: enrichedData?.priceChange.h24, pos: (enrichedData?.priceChange.h24 || 0) >= 0 },
                             ].map((item, i) => (
-                                <div key={i} className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm`}>
+                                <div key={i} className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border border-border/50 bg-main/30 min-w-[50px] shadow-sm flex-1 lg:flex-none`}>
                                     <span className="text-[9px] font-bold text-text-medium uppercase tracking-wider leading-none mb-1">{item.label}</span>
                                     <span className={`text-xs font-bold leading-none ${item.pos ? 'text-primary-green' : 'text-primary-red'}`}>
-                                        {item.val}
+                                        {item.val?.toFixed(2)}%
                                     </span>
                                 </div>
                             ))}
@@ -187,108 +227,102 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 </div>
             </div>
 
-            {/* 3. Main Content (No Sidebar) */}
+            {/* 3. Main Content */}
             <div className="flex flex-col gap-6">
                 
-                {/* TRADINGVIEW CHART WIDGET */}
+                {/* DEXSCREENER EMBED CHART (Ensures perfect match for all pairs/chains) */}
                 <div className="bg-card border border-border rounded-xl p-1 overflow-hidden shadow-sm flex flex-col">
-                    <div className="w-full h-[500px] relative">
-                        <div id="tradingview_widget" ref={widgetRef} className="w-full h-full"></div>
+                    <div className="w-full h-[600px] relative">
+                        <iframe 
+                            src={`https://dexscreener.com/${enrichedData?.chainId}/${enrichedData?.pairAddress}?embed=1&theme=dark`} 
+                            style={{ width: '100%', height: '100%', border: '0' }}
+                            title="DexScreener Chart"
+                        ></iframe>
                     </div>
-                </div>
-
-                {/* Token Stats (Moved back here) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                    {[
-                        { l: 'Transactions (24h)', v: '38,214', c: 'text-text-light' },
-                        { l: 'Active Wallets', v: '12,940', c: 'text-text-light' },
-                        { l: 'Holders', v: '84,392', c: 'text-text-light' },
-                        { l: 'Buy Vol', v: '$670M', c: 'text-primary-green' },
-                        { l: 'Sell Vol', v: '$510M', c: 'text-primary-red' },
-                        { l: 'Net Vol', v: '+$160M', c: 'text-primary-green' },
-                        { l: 'Liq Pools', v: '128', c: 'text-text-light' }
-                    ].map((stat, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 hover:border-text-medium transition-colors flex flex-col justify-center h-full shadow-sm">
-                            <div className="text-[10px] uppercase font-bold text-text-medium mb-1 tracking-wide leading-tight">{stat.l}</div>
-                            <div className={`text-sm md:text-lg font-bold ${stat.c}`}>{stat.v}</div>
-                        </div>
-                    ))}
                 </div>
 
                 {/* Container for Activity & Wallets */}
                 <div className="flex flex-col xl:flex-row gap-6 w-full">
-                    {/* On-Chain Activity */}
+                    {/* On-Chain Activity Feed (Powered by Moralis) */}
                     <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
-                        <h3 className="text-lg font-bold mb-5 text-text-light">On-Chain Activity</h3>
+                        <div className="flex justify-between items-center mb-5">
+                             <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-bold text-text-light">On-Chain Activity</h3>
+                                {!isRealData && <span className="text-[10px] bg-primary-yellow/10 text-primary-yellow px-1.5 py-0.5 rounded border border-primary-yellow/30 uppercase font-bold">Simulated</span>}
+                                {isRealData && <span className="text-[10px] bg-primary-green/10 text-primary-green px-1.5 py-0.5 rounded border border-primary-green/30 uppercase font-bold">Moralis Live</span>}
+                             </div>
+                             <span className="text-xs bg-card-hover px-2 py-1 rounded text-text-medium border border-border">Live Feed</span>
+                        </div>
+                        
+                        {/* Feed Content */}
                         <div className="flex flex-col flex-grow">
-                            {[
-                                { type: 'Liquidity Added', val: '+$12.4M', desc: 'added to Uniswap V3', time: '2h ago', color: 'text-primary-green' },
-                                { type: 'Large Transaction', val: '3,200 ETH', desc: 'transferred from 0x9f...32a', time: '4h ago', color: 'text-primary-blue' },
-                                { type: 'Liquidity Removed', val: '-$3.1M', desc: 'withdrawn from SushiSwap', time: '6h ago', color: 'text-primary-red' },
-                                { type: 'Transaction Spike', val: 'Surge', desc: 'in transactions detected', time: '8h ago', color: 'text-primary-purple' },
-                                { type: 'Large Buy', val: '500 ETH', desc: 'bought by Whale 0x3a', time: '9h ago', color: 'text-primary-green' },
-                            ].map((item, i) => (
+                            {activityFeed.slice(0, 8).map((item, i) => (
                                 <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
                                     <div>
                                         <div className={`font-bold text-sm ${item.color} mb-0.5`}>{item.type}</div>
-                                        <div className="text-xs text-text-medium"><span className="font-bold text-text-light">{item.val}</span> {item.desc}</div>
+                                        <div className="text-xs text-text-medium">
+                                            <span className="font-bold text-text-light">{item.val} {enrichedData?.baseToken.symbol}</span> {item.desc}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-text-dark font-mono font-medium whitespace-nowrap ml-2">{item.time}</div>
+                                    <div className="flex flex-col items-end">
+                                        <div className="text-xs font-bold text-text-light">{item.usd}</div>
+                                        <div className="text-[10px] text-text-dark font-mono font-medium whitespace-nowrap">{item.time}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                         <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                            See More Activity
+                            Load More Events
                         </button>
                     </div>
 
                     {/* Wallet Interactions Table */}
                     <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
-                        <h3 className="text-lg font-bold mb-6 text-text-light">Wallet Interactions</h3>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-text-light">Wallet Interactions</h3>
+                            <span className="text-xs text-text-medium">Real-time scan</span>
+                        </div>
                         <div className="overflow-x-auto flex-grow custom-scrollbar pb-2">
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="text-left text-xs text-text-dark uppercase tracking-wider border-b border-border">
                                         <th className="pb-4 pl-2 font-bold w-[15%]">Action</th>
-                                        <th className="pb-4 font-bold w-[20%]">Amount</th>
+                                        <th className="pb-4 font-bold w-[25%]">Amount</th>
                                         <th className="pb-4 font-bold w-[15%]">Time</th>
-                                        <th className="pb-4 font-bold w-[30%]">Wallet</th>
-                                        <th className="pb-4 text-right pr-2 font-bold w-[20%]">Options</th>
+                                        <th className="pb-4 font-bold w-[25%]">Wallet / Tag</th>
+                                        <th className="pb-4 text-right pr-2 font-bold w-[20%]">Track</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[
-                                        { w: '0x9f...32a', a: 'Buy', amt: '1,200 ETH', t: '4h ago', type: 'buy' },
-                                        { w: '0x4b...91c', a: 'Sell', amt: '800 ETH', t: '5h ago', type: 'sell' },
-                                        { w: '0x1c...99b', a: 'Buy', amt: '450 ETH', t: '8h ago', type: 'buy' },
-                                        { w: '0x7d...a44', a: 'Sell', amt: '1,500 ETH', t: '9h ago', type: 'sell' },
-                                        { w: '0x3a...11f', a: 'Buy', amt: '200 ETH', t: '11h ago', type: 'buy' },
-                                    ].map((row, i) => (
+                                    {activityFeed.slice(0, 8).map((row, i) => (
                                         <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/40 transition-colors">
-                                            <td className="py-5 pl-2">
+                                            <td className="py-4 pl-2">
                                                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${
-                                                    row.type === 'buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
+                                                    row.type === 'Buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'
                                                 }`}>
-                                                    {row.a}
+                                                    {row.type}
                                                 </span>
                                             </td>
-                                            <td className="py-5 font-bold text-text-light text-xs">{row.amt}</td>
-                                            <td className="py-5 text-text-medium font-medium text-xs whitespace-nowrap">{row.t}</td>
-                                            <td className="py-5 font-mono text-primary-blue cursor-pointer hover:underline text-xs">{row.w}</td>
-                                            <td className="py-5 text-right pr-2">
-                                                <div className="flex gap-2 justify-end">
-                                                    <button className="px-2 py-1 bg-transparent border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">View</button>
-                                                    <button className="px-2 py-1 bg-primary-green/10 border border-primary-green/30 text-primary-green text-[10px] font-bold rounded hover:bg-primary-green hover:text-main transition-all uppercase">Track</button>
+                                            <td className="py-4 font-bold text-text-light text-xs">{row.val} {enrichedData?.baseToken.symbol}</td>
+                                            <td className="py-4 text-text-medium font-medium text-xs whitespace-nowrap">{row.time}</td>
+                                            <td className="py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="font-mono text-primary-blue cursor-pointer hover:underline text-xs">
+                                                        {row.wallet.slice(0, 6)}...{row.wallet.slice(-4)}
+                                                    </span>
+                                                    <span className="text-[9px] text-text-medium">{row.tag}</span>
                                                 </div>
+                                            </td>
+                                            <td className="py-4 text-right pr-2">
+                                                <button className="px-3 py-1 bg-card border border-border text-text-medium text-[10px] font-bold rounded hover:bg-card-hover hover:text-text-light transition-all uppercase">
+                                                    View
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
-                            See More Interactions
-                        </button>
                     </div>
                 </div>
 
@@ -328,7 +362,8 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                     </div>
 
                     <a 
-                        href="#"
+                        href={enrichedData?.url}
+                        target="_blank"
                         className="bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:bg-card-hover hover:border-text-medium transition-all cursor-pointer group"
                     >
                         <div className="flex items-center gap-3">
@@ -336,13 +371,13 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 <img src="https://cryptologos.cc/logos/uniswap-uni-logo.png" alt="Uniswap" className="w-6 h-6" />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-sm font-bold text-text-light">Uniswap V3 Pool</span>
-                                <span className="text-[10px] text-text-medium">Best rates via aggregator</span>
+                                <span className="text-sm font-bold text-text-light">Trade on {enrichedData?.dexId.toUpperCase() || 'DEX'}</span>
+                                <span className="text--[10px] text-text-medium">Best rates via aggregator</span>
                             </div>
                         </div>
                         
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-text-light group-hover:text-white uppercase tracking-wide">Trade on Uniswap</span>
+                            <span className="text-sm font-bold text-text-light group-hover:text-white uppercase tracking-wide">View Pair</span>
                             <ExternalLink size={16} className="text-text-medium group-hover:text-white" />
                         </div>
                     </a>

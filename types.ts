@@ -37,9 +37,18 @@ export interface MarketCoin {
   h24: string;
   d7: string;
   cap: string;
-  dexBuy: string;
-  dexSell: string;
-  dexFlow: number;
+  liquidity: string;
+  volume24h: string; 
+  dexBuys: string;  // New: 24h Buy Volume
+  dexSells: string; // New: 24h Sell Volume
+  dexFlow: number;  // Visual score 0-100
+  netFlow: string;  // New: Net Flow Value (e.g. +$50K)
+  smartMoney: string; 
+  smartMoneySignal: 'Inflow' | 'Outflow' | 'Neutral';
+  signal: 'Volume Spike' | 'Accumulation' | 'Breakout' | 'Dump' | 'None';
+  riskLevel: 'Low' | 'Medium' | 'High';
+  age: string;
+  createdTimestamp: number;
   img: string;
   trend: 'Bullish' | 'Bearish';
   chain: string;

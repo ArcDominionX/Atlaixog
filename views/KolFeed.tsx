@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SortDesc, TrendingUp, Zap, Target, Brain, Heart, Repeat, MessageSquare, Twitter, Send, ExternalLink, Wallet, Check, ShieldCheck, ChevronDown } from 'lucide-react';
 import { Post } from '../types';
@@ -218,7 +219,7 @@ export const KolFeed: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-6 mb-8 relative z-10">
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 mb-8 relative z-10">
                 {/* Main Feed with 3 Posts: Bullish, Bearish, Neutral */}
                 <div className="flex flex-col gap-5">
                     {/* Post 1: Bullish (X/Twitter) */}
@@ -360,7 +361,7 @@ export const KolFeed: React.FC = () => {
                 </div>
 
                 {/* Sidebar Column - Restored Content */}
-                <div className="flex flex-col gap-5">
+                <div className="flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-col gap-5">
                     <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
                         <h4 className="text-base font-bold mb-4 text-text-light border-b border-border pb-2">Narrative Trends</h4>
                         <div className="flex flex-col gap-3">

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Copy, ExternalLink, Zap, Trash, Lock, ArrowLeft, RefreshCw, Layers } from 'lucide-react';
+import { Search, ChevronDown, Copy, ExternalLink, Zap, Trash, Lock, ArrowLeft, RefreshCw, Layers, ArrowUpRight, ArrowDownLeft, Repeat, CheckCircle } from 'lucide-react';
 import { ChainRouter, PortfolioData } from '../services/ChainRouter';
 
 // Declare ApexCharts
@@ -414,8 +414,46 @@ export const WalletTracking: React.FC = () => {
 
                             <div className="bg-card border border-border rounded-xl p-6 flex flex-col">
                                 <h3 className="card-title text-base">Recent Transactions</h3>
-                                <div className="flex items-center justify-center h-full text-text-dark text-sm italic">
-                                    No data available
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left border-separate border-spacing-y-2">
+                                        <thead>
+                                            <tr className="text-text-dark text-[10px] font-bold uppercase tracking-wide">
+                                                <th className="pb-1">Type</th>
+                                                <th className="pb-1">Hash</th>
+                                                <th className="pb-1">Value</th>
+                                                <th className="pb-1">Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {[
+                                                { type: 'Swap', icon: <Repeat size={14} />, hash: '0x3a...11f', val: '-150 SOL', asset: '+25k USDC', time: '5m ago', color: 'text-primary-yellow' },
+                                                { type: 'Transfer', icon: <ArrowUpRight size={14} />, hash: '0x9f...32a', val: '-500 USDC', asset: '', time: '20m ago', color: 'text-primary-red' },
+                                                { type: 'Receive', icon: <ArrowDownLeft size={14} />, hash: '0x1c...99b', val: '+2000 JUP', asset: '', time: '1h ago', color: 'text-primary-green' },
+                                                { type: 'Swap', icon: <Repeat size={14} />, hash: '0x7d...a44', val: '-5000 JUP', asset: '+50 SOL', time: '2h ago', color: 'text-primary-yellow' },
+                                                { type: 'Approve', icon: <CheckCircle size={14} />, hash: '0x4b...91c', val: 'Unlimited', asset: 'USDC', time: '5h ago', color: 'text-text-light' },
+                                                { type: 'Mint', icon: <Zap size={14} />, hash: '0x88...12c', val: 'NFT #4201', asset: '', time: '1d ago', color: 'text-primary-purple' },
+                                            ].map((tx, i) => (
+                                                <tr key={i} className="group hover:bg-card-hover/30 transition-colors cursor-default">
+                                                    <td className="py-2 pr-2">
+                                                        <div className="flex items-center gap-2 font-medium text-text-light">
+                                                            <div className={`w-6 h-6 rounded-md bg-main border border-border flex items-center justify-center ${tx.color.replace('text-', 'text-opacity-80 text-')}`}>
+                                                                {tx.icon}
+                                                            </div>
+                                                            {tx.type}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2 pr-2 font-mono text-xs text-primary-blue hover:underline cursor-pointer">{tx.hash}</td>
+                                                    <td className="py-2 pr-2">
+                                                        <div className="flex flex-col">
+                                                            <span className={`text-xs font-bold ${tx.val.startsWith('-') ? 'text-text-light' : 'text-primary-green'}`}>{tx.val}</span>
+                                                            {tx.asset && <span className="text-[10px] text-text-medium">{tx.asset}</span>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2 text-xs text-text-dark font-medium whitespace-nowrap">{tx.time}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

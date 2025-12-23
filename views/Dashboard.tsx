@@ -1,6 +1,6 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, ArrowUp, ArrowDown, Plus, Search, ChevronRight, Settings, Database, Server } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, Plus, Search, ChevronRight, ChevronLeft, Settings, Database, Server, Flame, ArrowUpRight, ArrowDownRight, Clock, Info, RefreshCw } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DualRangeSlider } from '../components/DualRangeSlider';
 import { DatabaseService } from '../services/DatabaseService';
@@ -12,9 +12,23 @@ interface DashboardProps {
     onTokenSelect?: (token: MarketCoin | string) => void;
 }
 
+// Helper to parse currency strings into numbers for sorting
+const parseCurrency = (val: string | number) => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    let clean = val.toString().replace(/[$,]/g, '');
+    let multiplier = 1;
+    if (clean.includes('T')) multiplier = 1e12;
+    else if (clean.includes('B')) multiplier = 1e9;
+    else if (clean.includes('M')) multiplier = 1e6;
+    else if (clean.includes('K')) multiplier = 1e3;
+    
+    clean = clean.replace(/[TBMK%]/g, '');
+    return parseFloat(clean) * multiplier;
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [timeFrame, setTimeFrame] = useState('12H');
-    const [dropdownOpen, setDropdownOpen] = useState(false);
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [mcapMin, setMcapMin] = useState(2);
     const [mcapMax, setMcapMax] = useState(5);
@@ -23,30 +37,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [activeAgeDropdown, setActiveAgeDropdown] = useState<'from' | 'to' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+    
+    // Sorting State - Default: DEX Flow (Net Flow) Descending
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'change', direction: 'desc' });
+
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [dbStatus, setDbStatus] = useState<{source: string, latency: number} | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     
     // Refs for positioning
     const buttonRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
-    // Load Data via DatabaseService
+    // Load Data Function
+    const loadData = async (force: boolean = false) => {
+        setIsLoading(true);
+        try {
+            const response = await DatabaseService.getMarketData(force);
+            setMarketData(response.data);
+            setDbStatus({ source: response.source, latency: response.latency });
+            setLastUpdated(new Date());
+        } catch (e) {
+            console.error("DB Error", e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Initial Load & Auto-Refresh Interval
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            try {
-                const response = await DatabaseService.getMarketData();
-                setMarketData(response.data);
-                setDbStatus({ source: response.source, latency: response.latency });
-            } catch (e) {
-                console.error("DB Error", e);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadData();
-    }, [timeFrame]); // Reload when timeframe changes to simulate new query
+        loadData(); // Initial load
+
+        // Auto-refresh every 30 seconds to satisfy "Self-Updating" requirement
+        const interval = setInterval(() => {
+            loadData(true);
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [timeFrame]); 
 
     const toggleFilter = (filterName: string) => {
         setActiveFilter(activeFilter === filterName ? null : filterName);
@@ -101,28 +133,82 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     }, [activeFilter]);
 
     const getChange = (coin: MarketCoin) => { 
-        const parseVal = (str: string) => parseFloat(str.replace('%', '').replace('+', ''));
-        const formatVal = (num: number) => (num > 0 ? '+' : '') + num.toFixed(2) + '%';
-        
-        const h1 = parseVal(coin.h1);
-        const h24 = parseVal(coin.h24);
-        const d7 = parseVal(coin.d7);
-
-        switch(timeFrame) {
-            case 'All': return formatVal(d7 * 12.5);
-            case '1H': return coin.h1;
-            case '6H': return formatVal(h24 * 0.25);
-            case '12H': return formatVal(h24 * 0.5);
-            case '1D': return coin.h24;
-            case '1W': return coin.d7;
-            default: return coin.h24;
-        }
+        // Using static data for now, but logical flow for timeframe scaling
+        return coin.h24;
     };
+
+    // Sorting Logic
+    const handleSort = (key: string, specificDirection?: 'asc' | 'desc') => {
+        if (specificDirection) {
+            setSortConfig({ key, direction: specificDirection });
+        } else {
+            // Toggle
+            if (sortConfig?.key === key) {
+                setSortConfig({ key, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' });
+            } else {
+                setSortConfig({ key, direction: 'desc' });
+            }
+        }
+        setCurrentPage(1); // Reset to page 1 on sort
+    };
+
+    const sortedData = useMemo(() => {
+        let data = [...marketData];
+        if (!sortConfig) return data;
+
+        return data.sort((a, b) => {
+            const { key, direction } = sortConfig;
+            
+            const getValue = (item: MarketCoin) => {
+                if (key === 'change') return parseFloat(item.h24.replace('%', '').replace(',', ''));
+                if (key === 'ticker') return item.ticker;
+                if (key === 'price') return parseCurrency(item.price);
+                if (key === 'cap') return parseCurrency(item.cap);
+                if (key === 'liquidity') return parseCurrency(item.liquidity);
+                if (key === 'volume') return parseCurrency(item.volume24h);
+                if (key === 'dexBuys') return parseCurrency(item.dexBuys);
+                if (key === 'dexSells') return parseCurrency(item.dexSells);
+                if (key === 'netFlow') return parseCurrency(item.netFlow.replace('+', ''));
+                return 0;
+            };
+
+            const aVal = getValue(a);
+            const bVal = getValue(b);
+
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            }
+            return direction === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+        });
+    }, [marketData, sortConfig]);
+
+    // Pagination Logic
+    const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+    const paginatedData = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return sortedData.slice(start, start + itemsPerPage);
+    }, [sortedData, currentPage]);
+
+    const handleNextPage = () => {
+        if (currentPage < totalPages) setCurrentPage(p => p + 1);
+    };
+
+    const handlePrevPage = () => {
+        if (currentPage > 1) setCurrentPage(p => p - 1);
+    };
+
+    // Calculate Max Flow for graphical normalization
+    const maxAbsFlow = useMemo(() => {
+        if (marketData.length === 0) return 0;
+        return Math.max(...marketData.map(c => Math.abs(parseCurrency(c.netFlow))));
+    }, [marketData]);
 
     const getPercentColor = (val: string) => val.includes('-') ? 'text-primary-red' : 'text-primary-green';
 
     const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-        e.currentTarget.src = 'https://via.placeholder.com/24/2A2E33/FFFFFF?text=' + e.currentTarget.alt.charAt(0);
+        // Fallback to a generic coin icon if specific logo fails
+        e.currentTarget.src = 'https://cryptologos.cc/logos/bitcoin-btc-logo.png'; 
+        e.currentTarget.style.filter = 'grayscale(100%) opacity(0.5)'; // visual hint it's a placeholder
     };
 
     const getChainIcon = (chain: string) => {
@@ -131,19 +217,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             case 'ethereum': return 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
             case 'solana': return 'https://cryptologos.cc/logos/solana-sol-logo.png';
             case 'bsc': return 'https://cryptologos.cc/logos/bnb-bnb-logo.png';
+            case 'base': return 'https://cryptologos.cc/logos/ethereum-eth-logo.png'; // Using Eth logo for Base for now
             case 'xrp': return 'https://cryptologos.cc/logos/xrp-xrp-logo.png';
-            case 'cardano': return 'https://cryptologos.cc/logos/cardano-ada-logo.png';
-            case 'avalanche': return 'https://cryptologos.cc/logos/avalanche-avax-logo.png';
-            case 'dogecoin': return 'https://cryptologos.cc/logos/dogecoin-doge-logo.png';
-            case 'polkadot': return 'https://cryptologos.cc/logos/polkadot-dot-logo.png';
             default: return 'https://via.placeholder.com/20';
         }
+    };
+
+    // Sort Header Component
+    const SortHeader = ({ label, sortKey, minWidth, rightAlign }: { label: string, sortKey: string, minWidth?: string, rightAlign?: boolean }) => {
+        const active = sortConfig?.key === sortKey;
+        const dir = sortConfig?.direction;
+        
+        return (
+            <th 
+                className={sortKey === 'ticker' ? "sticky-col" : ""} 
+                style={minWidth ? {minWidth} : undefined}
+            >
+                <div 
+                    className={`flex items-center gap-1.5 cursor-pointer group select-none ${rightAlign ? 'justify-end' : ''}`}
+                    onClick={() => handleSort(sortKey)}
+                >
+                    <div className="flex items-center gap-1">
+                        {label.includes('Volume') || label.includes('Liquidity') || label.includes('MCap') || label.includes('Buys') || label.includes('Sells') ? <Info size={12} className="text-text-dark" /> : null}
+                        {label}
+                    </div>
+                    <div className="flex flex-col gap-[2px]">
+                        <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" className={`transition-colors cursor-pointer ${active && dir === 'asc' ? 'text-primary-green' : 'text-text-dark group-hover:text-text-medium'}`} onClick={(e) => { e.stopPropagation(); handleSort(sortKey, 'asc'); }}><path d="M4 0L8 5H0L4 0Z" /></svg>
+                        <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" className={`transition-colors cursor-pointer ${active && dir === 'desc' ? 'text-primary-green' : 'text-text-dark group-hover:text-text-medium'}`} onClick={(e) => { e.stopPropagation(); handleSort(sortKey, 'desc'); }}><path d="M4 5L0 0H8L4 5Z" /></svg>
+                    </div>
+                </div>
+            </th>
+        );
     };
 
     return (
         <div className="flex flex-col gap-6 pb-16">
             
-            {/* 1. Search Section (Strictly Horizontal) */}
+            {/* 1. Search Section */}
             <div className="bg-card border border-border rounded-xl p-3 md:p-5 shadow-lg relative z-40">
                 <div className="flex flex-row items-center gap-2 w-full flex-nowrap">
                     <div className="flex-1 bg-main border border-border rounded-lg flex items-center px-4 py-2.5 transition-all focus-within:border-primary-green/50">
@@ -165,186 +275,63 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                 </div>
             </div>
 
-            {/* 2. Live Market Data (Now below Search) */}
+            {/* 2. Live Market Data */}
             <div className="bg-card border border-border rounded-xl p-3 md:p-5 overflow-visible shadow-sm relative z-30">
                 <div className="flex flex-col gap-3 mb-4">
                     <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-lg">Live Market Data</h3>
-                    </div>
-                    
-                    {/* Timeframe Filter */}
-                    <div className="flex flex-wrap justify-end gap-2 w-full">
-                        {['All', '1H', '6H', '12H', '1D', '1W'].map((tf) => (
+                        <div className="flex items-center gap-3">
+                            <h3 className="font-bold text-lg">Live Alpha Feed</h3>
                             <button 
-                                key={tf}
-                                onClick={() => setTimeFrame(tf)}
-                                className={`
-                                    px-4 py-1.5 text-xs font-semibold rounded-full border transition-all whitespace-nowrap
-                                    ${timeFrame === tf 
-                                        ? 'bg-card-hover border-text-light text-text-light' 
-                                        : 'bg-transparent border-border text-text-medium hover:border-text-medium hover:text-text-light'
-                                    }
-                                `}
+                                onClick={() => loadData(true)} 
+                                className="p-1.5 rounded-lg bg-card-hover border border-border hover:text-primary-green transition-all"
+                                title="Force Refresh"
                             >
-                                {tf}
+                                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                             </button>
-                        ))}
+                        </div>
+                        <div className="flex flex-col items-end">
+                            <div className="text-xs text-text-medium font-mono">
+                                Showing {paginatedData.length} of {sortedData.length}
+                            </div>
+                            <div className="text-[10px] text-text-dark mt-0.5">
+                                Updated: {lastUpdated.toLocaleTimeString()}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                {/* Filters */}
-                <div className="mb-4 relative">
-                    <div className="flex gap-2 md:gap-3 overflow-x-auto custom-scrollbar pb-3 px-1">
-                        <div className="filter-wrapper relative flex-shrink-0">
-                            <div 
-                                className={`filter-pill ${activeFilter === 'mcap' ? 'active' : ''}`} 
-                                onClick={() => toggleFilter('mcap')}
-                                ref={el => (buttonRefs.current['mcap'] = el)}
-                            >
-                                All Caps <ChevronDown size={14} />
-                            </div>
-                            {activeFilter === 'mcap' && (
-                                <div className="filter-popup complex" style={getDropdownStyle('mcap')}>
-                                    <div className="font-bold mb-3 text-sm text-text-light">Market Cap Range</div>
-                                    <DualRangeSlider min={0} max={6} onChange={(min, max) => { setMcapMin(min); setMcapMax(max); }} />
-                                    <div className="flex justify-between text-xs text-text-light mt-[-5px] font-bold"><span>{mcapLabels[mcapMin]}</span><span>{mcapLabels[mcapMax]}</span></div>
-                                    <div className="flex gap-2 mt-5">
-                                        <button className="btn btn-outline flex-1 py-1.5 text-[10px] uppercase" onClick={() => setActiveFilter(null)}>Cancel</button>
-                                        <button className="btn btn-green flex-1 py-1.5 text-[10px] uppercase" onClick={() => setActiveFilter(null)}>Apply</button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Age Filter */}
-                        <div className="filter-wrapper relative flex-shrink-0">
-                            <div 
-                                className={`filter-pill ${activeFilter === 'age' ? 'active' : ''}`} 
-                                onClick={() => toggleFilter('age')}
-                                ref={el => (buttonRefs.current['age'] = el)}
-                            >
-                                Age <ChevronDown size={14} />
-                            </div>
-                            {activeFilter === 'age' && (
-                                <div className="filter-popup complex" style={getDropdownStyle('age')}>
-                                    <div className="font-bold mb-3 text-sm text-text-light">Token Age Range</div>
-                                    <div className="flex gap-3 mb-4">
-                                        <div className="flex-1 relative">
-                                            <label className="text-[10px] font-semibold text-text-medium mb-1 block uppercase">From</label>
-                                            <div 
-                                                className="w-full bg-main border border-border rounded text-text-light p-2 text-xs flex justify-between items-center cursor-pointer hover:border-text-medium transition-colors"
-                                                onClick={() => setActiveAgeDropdown(activeAgeDropdown === 'from' ? null : 'from')}
-                                            >
-                                                {ageFrom} <ChevronDown size={12} className={`transition-transform ${activeAgeDropdown === 'from' ? 'rotate-180' : ''}`} />
-                                            </div>
-                                            {activeAgeDropdown === 'from' && (
-                                                <div className="absolute top-full left-0 w-full bg-card border border-border rounded-lg mt-1 z-[60] max-h-40 overflow-y-auto shadow-xl">
-                                                    {ageOptions.map(opt => (
-                                                        <div 
-                                                            key={opt} 
-                                                            className={`p-2 text-xs hover:bg-card-hover cursor-pointer text-text-light border-b border-border/50 last:border-0 ${ageFrom === opt ? 'bg-primary-green/10 text-primary-green font-bold' : ''}`}
-                                                            onClick={() => { setAgeFrom(opt); setActiveAgeDropdown(null); }}
-                                                        >
-                                                            {opt}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex-1 relative">
-                                            <label className="text-[10px] font-semibold text-text-medium mb-1 block uppercase">To</label>
-                                            <div 
-                                                className="w-full bg-main border border-border rounded text-text-light p-2 text-xs flex justify-between items-center cursor-pointer hover:border-text-medium transition-colors"
-                                                onClick={() => setActiveAgeDropdown(activeAgeDropdown === 'to' ? null : 'to')}
-                                            >
-                                                {ageTo} <ChevronDown size={12} className={`transition-transform ${activeAgeDropdown === 'to' ? 'rotate-180' : ''}`} />
-                                            </div>
-                                            {activeAgeDropdown === 'to' && (
-                                                <div className="absolute top-full left-0 w-full bg-card border border-border rounded-lg mt-1 z-[60] max-h-40 overflow-y-auto shadow-xl">
-                                                    {ageOptions.map(opt => (
-                                                        <div 
-                                                            key={opt} 
-                                                            className={`p-2 text-xs hover:bg-card-hover cursor-pointer text-text-light border-b border-border/50 last:border-0 ${ageTo === opt ? 'bg-primary-green/10 text-primary-green font-bold' : ''}`}
-                                                            onClick={() => { setAgeTo(opt); setActiveAgeDropdown(null); }}
-                                                        >
-                                                            {opt}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button className="btn btn-outline flex-1 py-1.5 text-[10px] uppercase" onClick={() => setActiveFilter(null)}>Cancel</button>
-                                        <button className="btn btn-green flex-1 py-1.5 text-[10px] uppercase" onClick={() => setActiveFilter(null)}>Apply</button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        <div className="filter-wrapper relative flex-shrink-0">
-                            <div 
-                                className={`filter-pill ${activeFilter === 'sector' ? 'active' : ''}`} 
-                                onClick={() => toggleFilter('sector')}
-                                ref={el => (buttonRefs.current['sector'] = el)}
-                            >
-                                Sectors <ChevronDown size={14} />
-                            </div>
-                            {activeFilter === 'sector' && (
-                                <div className="filter-popup" style={getDropdownStyle('sector')}>
-                                    <ul className="flex flex-col gap-1">
-                                        {['All', 'RWA', 'AI', 'Meme', 'DeFi', 'Gaming', 'DePIN'].map(s => (<li key={s} className="filter-list-item" onClick={() => setActiveFilter(null)}>{s}</li>))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="filter-wrapper relative flex-shrink-0">
-                            <div 
-                                className={`filter-pill ${activeFilter === 'chain' ? 'active' : ''}`} 
-                                onClick={() => toggleFilter('chain')}
-                                ref={el => (buttonRefs.current['chain'] = el)}
-                            >
-                                Chain <ChevronDown size={14} />
-                            </div>
-                            {activeFilter === 'chain' && (
-                                <div className="filter-popup" style={getDropdownStyle('chain')}>
-                                    <ul className="flex flex-col gap-1">
-                                        {['All', 'Solana', 'Ethereum', 'Base', 'Arbitrum', 'Optimism', 'BNB Chain', 'Polygon'].map(c => (<li key={c} className="filter-list-item" onClick={() => setActiveFilter(null)}>{c}</li>))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-
-                    </div>
-                </div>
-
-                {/* Table (Compact) */}
+                {/* Table (Compact & Nansen-Style) */}
                 <div className="overflow-x-auto min-h-[400px] custom-scrollbar">
-                    {isLoading ? (
+                    {isLoading && marketData.length === 0 ? (
                         <div className="w-full h-[400px] flex items-center justify-center flex-col gap-3">
                             <div className="w-8 h-8 border-2 border-primary-green border-t-transparent rounded-full animate-spin"></div>
-                            <div className="text-sm font-bold text-text-medium">Syncing with Market Database...</div>
+                            <div className="text-sm font-bold text-text-medium">Scanning for Alpha Signals...</div>
                         </div>
                     ) : (
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th className="sticky-col" style={{minWidth: '135px'}}>Chain / Token <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                    <th>Price <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                    <th style={{width: '90px'}}>
-                                        Chg {timeFrame} <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div>
-                                    </th>
-                                    <th>MCap <div className="inline-flex flex-col ml-1 align-middle opacity-60 hover:opacity-100 cursor-pointer"><ArrowUp size={8} /><ArrowDown size={8} /></div></th>
-                                    <th>DEX Buys</th>
-                                    <th>DEX Sells</th>
-                                    <th>DEX Flows</th>
-                                    <th>AI Trend</th>
+                                    <SortHeader label="Chain Token" sortKey="ticker" minWidth="160px" />
+                                    <SortHeader label="Price" sortKey="price" />
+                                    <SortHeader label="Chg 24h" sortKey="change" minWidth="80px" rightAlign />
+                                    <SortHeader label="MCap" sortKey="cap" rightAlign />
+                                    <SortHeader label="DEX Volume" sortKey="volume" rightAlign />
+                                    <SortHeader label="Liquidity" sortKey="liquidity" rightAlign />
+                                    <SortHeader label="DEX Buys" sortKey="dexBuys" rightAlign />
+                                    <SortHeader label="DEX Sells" sortKey="dexSells" rightAlign />
+                                    <SortHeader label="DEX Flow" sortKey="netFlow" minWidth="120px" rightAlign />
                                 </tr>
                             </thead>
                             <tbody>
-                                {marketData.slice(0, 10).map((coin) => {
+                                {paginatedData.map((coin) => {
                                     const changeVal = getChange(coin);
+                                    const flowVal = parseCurrency(coin.netFlow);
+                                    const absFlow = Math.abs(flowVal);
+                                    const flowPercent = maxAbsFlow > 0 ? (absFlow / maxAbsFlow) * 100 : 0;
+                                    const isPositiveFlow = !coin.netFlow.includes('-');
+                                    const flowColor = isPositiveFlow ? 'bg-primary-green' : 'bg-primary-red';
+                                    const flowTextColor = isPositiveFlow ? 'text-primary-green' : 'text-primary-red';
+                                    
                                     return (
                                         <tr 
                                             key={coin.id} 
@@ -356,34 +343,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                                                     <div className="w-5 h-5 flex items-center justify-center bg-card-hover rounded-full border border-border/50 shrink-0">
                                                         <img src={getChainIcon(coin.chain)} alt={coin.chain} className="w-3.5 h-3.5 opacity-80" />
                                                     </div>
-                                                    <img src={coin.img} alt={coin.name} width="20" height="20" className="rounded-full shrink-0" onError={handleImageError} />
+                                                    <img src={coin.img} alt={coin.name} width="24" height="24" className="rounded-full shrink-0 object-cover bg-card" onError={handleImageError} />
                                                     <div className="flex flex-col">
-                                                        <div className="font-bold text-sm leading-none">{coin.ticker}</div>
+                                                        <div className="font-bold text-xs leading-none text-text-light">{coin.ticker}</div>
                                                         <div className="text-[9px] text-text-dark font-medium leading-tight mt-0.5">{coin.name}</div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="font-bold text-sm">{coin.price}</td>
-                                            <td className={`font-bold text-sm ${getPercentColor(changeVal)}`}>{changeVal}</td>
-                                            <td className="font-medium text-sm">{coin.cap}</td>
-                                            <td className="text-sm">{coin.dexBuy}</td>
-                                            <td className="text-sm">{coin.dexSell}</td>
-                                            <td>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-bold text-primary-green w-[35px] text-right">${(coin.dexFlow/10).toFixed(1)}M</span>
-                                                    <div className="w-[60px] h-1 bg-border rounded-full overflow-hidden">
-                                                        <div className="h-full bg-primary-green" style={{width: `${coin.dexFlow}%`}}></div>
+                                            
+                                            <td className="font-mono text-xs text-text-light font-medium">{coin.price}</td>
+                                            <td className={`font-bold text-xs text-right ${getPercentColor(changeVal)}`}>{changeVal}</td>
+                                            <td className="font-medium text-xs text-text-light text-right">{coin.cap}</td>
+                                            <td className="text-xs font-medium text-text-light text-right">{coin.volume24h}</td>
+                                            <td className="font-medium text-xs text-text-medium text-right">{coin.liquidity}</td>
+                                            
+                                            <td className="font-mono text-xs text-primary-green text-right">{coin.dexBuys}</td>
+                                            <td className="font-mono text-xs text-primary-red text-right">{coin.dexSells}</td>
+                                            
+                                            {/* Graphical DEX Flow Column */}
+                                            <td className="text-right">
+                                                <div className="flex items-center justify-end gap-2 w-full">
+                                                    <span className={`font-bold text-xs font-mono w-[60px] ${flowTextColor}`}>
+                                                        {coin.netFlow}
+                                                    </span>
+                                                    <div className="w-16 h-1.5 bg-card-hover rounded-full overflow-hidden shrink-0">
+                                                        <div 
+                                                            className={`h-full rounded-full ${flowColor}`} 
+                                                            style={{ width: `${flowPercent}%` }}
+                                                        />
                                                     </div>
                                                 </div>
-                                            </td>
-                                            <td>
-                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                                                    coin.trend === 'Bullish' 
-                                                    ? 'bg-primary-green/10 text-primary-green border-primary-green/30' 
-                                                    : 'bg-primary-red/10 text-primary-red border-primary-red/30'
-                                                }`}>
-                                                    {coin.trend}
-                                                </span>
                                             </td>
                                         </tr>
                                     );
@@ -393,10 +382,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                     )}
                 </div>
 
-                {/* Pagination Button */}
-                <div className="mt-6 flex justify-center">
-                    <button className="flex items-center gap-2 px-6 py-2.5 bg-transparent border border-border hover:border-text-medium hover:bg-card-hover rounded-lg transition-all text-text-medium hover:text-text-light font-bold text-sm">
-                        Next Page <ChevronRight size={18} />
+                {/* Pagination Controls */}
+                <div className="mt-6 flex justify-between items-center border-t border-border pt-4">
+                    <button 
+                        onClick={handlePrevPage}
+                        disabled={currentPage === 1}
+                        className={`flex items-center gap-2 px-4 py-2 bg-transparent border border-border rounded-lg transition-all font-bold text-sm ${
+                            currentPage === 1 
+                                ? 'opacity-0 pointer-events-none' 
+                                : 'text-text-medium hover:border-text-medium hover:bg-card-hover hover:text-text-light cursor-pointer'
+                        }`}
+                    >
+                        <ChevronLeft size={16} /> Previous
+                    </button>
+
+                    <span className="text-xs font-medium text-text-medium">
+                        Page {currentPage} of {totalPages}
+                    </span>
+
+                    <button 
+                        onClick={handleNextPage}
+                        disabled={currentPage >= totalPages}
+                        className={`flex items-center gap-2 px-4 py-2 bg-transparent border border-border rounded-lg transition-all font-bold text-sm ${
+                            currentPage >= totalPages 
+                                ? 'opacity-50 cursor-not-allowed' 
+                                : 'text-text-medium hover:border-text-medium hover:bg-card-hover hover:text-text-light cursor-pointer'
+                        }`}
+                    >
+                        Next Page <ChevronRight size={16} />
                     </button>
                 </div>
             </div>
@@ -404,7 +417,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             {/* 3. AI Market Pulse */}
             <div className="w-full relative z-20">
                 <h3 className="text-base font-bold mb-4 text-text-light">AI Market Pulse</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <Activity size={14} className="text-text-medium" /> AI Sentiment
@@ -424,84 +437,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                             Solana <span className="text-[9px] text-primary-green font-bold px-1.5 py-0.5 rounded bg-primary-green/10 whitespace-nowrap">+8% inflow</span>
                         </div>
                     </div>
+                    
+                    {/* Top Inflow Card (Fixed layout for tablet) */}
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <TrendingUp size={14} className="text-text-medium" /> Top Inflow
                         </div>
-                        <div className="flex flex-col md:flex-row md:justify-between md:items-center w-full font-bold text-sm md:text-base gap-1">
-                            <span>$Fartcoin</span>
-                            <span className="text-primary-green text-xs md:text-sm">+$3.2M</span>
+                        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center w-full font-bold text-sm md:text-base gap-1">
+                            <span className="truncate">$RYU</span>
+                            <span className="text-primary-green text-xs md:text-sm whitespace-nowrap">+$1.42K</span>
                         </div>
-                        <div className="mt-0.5 flex justify-start md:justify-end">
+                        <div className="mt-0.5 flex justify-start">
                             <span className="px-1.5 py-0.5 rounded bg-primary-green/10 text-primary-green text-[9px] font-bold">Low Risk</span>
                         </div>
                     </div>
+                    
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <ShieldAlert size={14} className="text-text-medium" /> Risk Levels
                         </div>
                         <div className="text-sm md:text-lg font-bold text-primary-red">3 Critical Alerts</div>
                         <button className="mt-1.5 w-full bg-primary-yellow/10 border border-primary-yellow/30 text-primary-yellow text-[9px] md:text-[10px] font-bold py-1.5 rounded hover:bg-primary-yellow hover:text-main transition-colors uppercase tracking-wide">View Alerts</button>
-                    </div>
-                </div>
-            </div>
-
-            {/* 4. Middle Row (Watchlist, Actions, Narratives) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
-                {/* Watchlist */}
-                <div className="bg-card border border-border rounded-xl p-5 flex flex-col h-full min-h-[240px] shadow-sm">
-                    <h3 className="flex items-center gap-2 font-bold text-base mb-3">Watchlist</h3>
-                    <div className="flex-1 overflow-auto custom-scrollbar">
-                        <table className="w-full text-sm">
-                            <thead><tr className="text-left text-text-dark text-[10px] uppercase tracking-wide"><th className="pb-2 font-semibold">Coin</th><th className="pb-2 font-semibold text-right">Price</th></tr></thead>
-                            <tbody>
-                                {[
-                                    {ticker: 'BTC', price: '$82,000', img: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png'},
-                                    {ticker: 'ETH', price: '$3,150', img: 'https://cryptologos.cc/logos/ethereum-eth-logo.png'},
-                                    {ticker: 'SOL', price: '$126.61', img: 'https://cryptologos.cc/logos/solana-sol-logo.png'},
-                                    {ticker: 'AVAX', price: '$39.36', img: 'https://cryptologos.cc/logos/avalanche-avax-logo.png'}
-                                ].map((t,i) => (
-                                    <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-card-hover/30 transition-colors cursor-pointer" onClick={() => onTokenSelect && onTokenSelect(t.ticker)}>
-                                        <td className="py-2.5 flex items-center gap-2.5">
-                                            <img src={t.img} alt={t.ticker} className="w-5 h-5 rounded-full" onError={handleImageError} />
-                                            <span className="font-semibold text-sm">{t.ticker}</span>
-                                        </td>
-                                        <td className="py-2.5 text-right font-medium text-sm">{t.price}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    <button className="w-full mt-3 border border-dashed border-border text-text-medium text-xs font-semibold py-2 rounded-lg hover:border-text-light hover:text-text-light hover:bg-card-hover transition-colors flex items-center justify-center gap-2 uppercase tracking-wide"><Plus size={14} /> Add Token</button>
-                </div>
-
-                {/* Quick Actions (Icons color matched to text) */}
-                <div className="bg-card border border-border rounded-xl p-5 flex flex-col shadow-sm">
-                    <h3 className="font-bold text-base mb-3">Quick Action</h3>
-                    <div className="grid grid-cols-2 gap-2 h-full">
-                        {[
-                            { icon: <Scan size={24} className="text-text-medium" />, label: 'Safe Scan' },
-                            { icon: <Wallet size={24} className="text-text-medium" />, label: 'Wallet Tracking' },
-                            { icon: <Bell size={24} className="text-text-medium" />, label: 'Smart AI Alert' },
-                            { icon: <TrendingUp size={24} className="text-text-medium" />, label: 'View Smart Money' }
-                        ].map((a, i) => (
-                            <div key={i} className="bg-card-hover rounded-lg flex flex-col items-center justify-center text-center p-3 cursor-pointer hover:bg-border transition-colors group border border-transparent">
-                                {a.icon}
-                                <span className="text-xs font-semibold mt-2 group-hover:text-white transition-colors">{a.label}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Trending Narratives */}
-                <div className="bg-card border border-border rounded-xl p-5 flex flex-col shadow-sm">
-                    <h3 className="font-bold text-base mb-3">Trending Narratives</h3>
-                    <div className="grid grid-cols-2 gap-2 h-full">
-                        {['Meme', 'RWA', 'AI', 'Sol Ecosystem'].map((n, i) => (
-                            <div key={i} className="bg-card-hover rounded-lg flex items-center justify-center p-2 text-sm font-semibold hover:bg-border hover:text-white cursor-pointer transition-colors border border-transparent hover:border-text-dark text-center">
-                                {n}
-                            </div>
-                        ))}
                     </div>
                 </div>
             </div>

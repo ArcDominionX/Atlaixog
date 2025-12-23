@@ -23,18 +23,18 @@ const NavItem: React.FC<{
 }> = ({ active, icon, label, onClick, colorClass, tag }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center px-4 py-3.5 rounded-lg mb-1 transition-all duration-200 text-[0.95rem] font-medium relative group text-left
+    className={`w-full flex items-center px-3 py-2 rounded-lg mb-0.5 transition-all duration-200 text-[0.9rem] font-medium relative group text-left
       ${active ? 'bg-card text-text-light font-semibold' : 'text-text-medium hover:bg-card hover:text-text-light'}
       ${active && colorClass ? colorClass : ''}
     `}
   >
     {active && (
-      <div className="absolute left-[-1.5rem] top-0 bottom-0 w-1 rounded-r-md bg-primary-green" />
+      <div className="absolute left-[-0.75rem] top-0 bottom-0 w-1 rounded-r-md bg-primary-green" />
     )}
-    <span className={`mr-3.5 ${active ? 'text-current' : 'text-text-dark group-hover:text-current'}`}>
+    <span className={`mr-3 ${active ? 'text-current' : 'text-text-dark group-hover:text-current'}`}>
       {icon}
     </span>
-    <span className="flex-1">{label}</span>
+    <span className="flex-1 truncate">{label}</span>
     {tag && (
       <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded bg-primary-green/10 text-primary-green">
         {tag}
@@ -96,12 +96,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
 
       {/* Sidebar */}
       <aside className={`
-        fixed md:static inset-y-0 left-0 z-[1100] w-[300px] bg-sidebar border-r border-border
+        fixed md:static inset-y-0 left-0 z-[1100] w-[300px] md:w-[240px] lg:w-[280px] bg-sidebar border-r border-border
         transform transition-transform duration-300 ease-in-out flex flex-col shadow-2xl md:shadow-none
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
-        <div className="p-6 pb-4">
-          <div className="flex items-center gap-3 text-2xl font-bold text-text-light">
+        <div className="px-3 py-4">
+          <div className="flex items-center gap-3 text-2xl font-bold text-text-light pl-2">
             <img 
               src="./logo.png" 
               alt="Atlaix Logo" 
@@ -112,30 +112,30 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-2 pl-2">Overview</div>
-          <NavItem active={currentView === 'overview'} onClick={() => handleViewChange('overview')} icon={<LayoutDashboard size={22} />} label="Overview" />
+        <div className="flex-1 overflow-y-auto px-3 pb-6">
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-2 pl-2">Overview</div>
+          <NavItem active={currentView === 'overview'} onClick={() => handleViewChange('overview')} icon={<LayoutDashboard size={20} />} label="Overview" />
           
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-6 pl-2">Market Monitoring</div>
-          <NavItem active={currentView === 'kol-feed'} onClick={() => handleViewChange('kol-feed')} icon={<Users size={22} />} label="KOL / Influencer Feed" />
-          <NavItem active={currentView === 'custom-alerts'} onClick={() => handleViewChange('custom-alerts')} icon={<Bell size={22} />} label="Custom Alerts" />
-          <NavItem active={currentView === 'heatmap'} onClick={() => handleViewChange('heatmap')} icon={<Activity size={22} />} label="Token Heatmap" />
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-5 pl-2">Market Monitoring</div>
+          <NavItem active={currentView === 'kol-feed'} onClick={() => handleViewChange('kol-feed')} icon={<Users size={20} />} label="KOL / Influencer Feed" />
+          <NavItem active={currentView === 'custom-alerts'} onClick={() => handleViewChange('custom-alerts')} icon={<Bell size={20} />} label="Custom Alerts" />
+          <NavItem active={currentView === 'heatmap'} onClick={() => handleViewChange('heatmap')} icon={<Activity size={20} />} label="Token Heatmap" />
 
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-6 pl-2">Analytics & Insights</div>
-          <NavItem active={currentView === 'sentiment'} onClick={() => handleViewChange('sentiment')} icon={<Target size={22} />} label="Sentiment Analysis" />
-          <NavItem active={currentView === 'detection'} onClick={() => handleViewChange('detection')} icon={<Radar size={22} />} label="Detection" />
-          <NavItem active={currentView === 'virality'} onClick={() => handleViewChange('virality')} icon={<Flame size={22} />} label="Virality Prediction Engine" />
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-5 pl-2">Analytics & Insights</div>
+          <NavItem active={currentView === 'sentiment'} onClick={() => handleViewChange('sentiment')} icon={<Target size={20} />} label="Sentiment Analysis" />
+          <NavItem active={currentView === 'detection'} onClick={() => handleViewChange('detection')} icon={<Radar size={20} />} label="Detection" />
+          <NavItem active={currentView === 'virality'} onClick={() => handleViewChange('virality')} icon={<Flame size={20} />} label="Virality Prediction Engine" />
 
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-6 pl-2">Trading & Intelligence Tools</div>
-          <NavItem active={currentView === 'wallet-tracking'} onClick={() => handleViewChange('wallet-tracking')} icon={<Wallet size={22} />} label="Wallet Tracking" />
-          <NavItem active={currentView === 'chatbot'} onClick={() => handleViewChange('chatbot')} icon={<MessageSquare size={22} />} label="AI Chatbot" />
-          <NavItem active={currentView === 'smart-money'} onClick={() => handleViewChange('smart-money')} icon={<Zap size={22} />} label="Smart Money Tracking" />
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-5 pl-2">Trading & Intelligence Tools</div>
+          <NavItem active={currentView === 'wallet-tracking'} onClick={() => handleViewChange('wallet-tracking')} icon={<Wallet size={20} />} label="Wallet Tracking" />
+          <NavItem active={currentView === 'chatbot'} onClick={() => handleViewChange('chatbot')} icon={<MessageSquare size={20} />} label="AI Chatbot" />
+          <NavItem active={currentView === 'smart-money'} onClick={() => handleViewChange('smart-money')} icon={<Zap size={20} />} label="Smart Money Tracking" />
           
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-6 pl-2">Security & Risk</div>
-          <NavItem active={currentView === 'safe-scan'} onClick={() => handleViewChange('safe-scan')} icon={<ShieldCheck size={22} />} label="Safe Scan" />
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-5 pl-2">Security & Risk</div>
+          <NavItem active={currentView === 'safe-scan'} onClick={() => handleViewChange('safe-scan')} icon={<ShieldCheck size={20} />} label="Safe Scan" />
 
-          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-3 mt-6 pl-2">Account</div>
-          <NavItem active={currentView === 'settings'} onClick={() => handleViewChange('settings')} icon={<Settings size={22} />} label="Settings" />
+          <div className="text-xs font-bold text-text-dark uppercase tracking-wider mb-2 mt-5 pl-2">Account</div>
+          <NavItem active={currentView === 'settings'} onClick={() => handleViewChange('settings')} icon={<Settings size={20} />} label="Settings" />
           
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-card transition-colors cursor-pointer" onClick={onLogout}>
@@ -155,7 +155,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-main h-full">
         {/* Header */}
-        <header className="h-[80px] md:h-[100px] px-6 md:px-10 flex items-center justify-between sticky top-0 bg-[#111315e6] backdrop-blur-md z-30 border-b border-border/50">
+        <header className="h-[80px] md:h-[100px] px-4 md:px-6 flex items-center justify-between sticky top-0 bg-[#111315e6] backdrop-blur-md z-30 border-b border-border/50">
           <div className="flex items-center gap-5 overflow-hidden">
             <button 
               className="md:hidden text-text-medium hover:text-text-light"
@@ -212,7 +212,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewCha
         </header>
 
         {/* View Content */}
-        <main className="flex-1 overflow-y-auto p-5 md:p-8 relative">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 relative">
            {children}
         </main>
       </div>
