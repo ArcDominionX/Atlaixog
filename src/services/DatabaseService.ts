@@ -11,39 +11,38 @@ const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
 // --- RESEARCH & GEM REQUIREMENTS ---
 const REQUIREMENTS = {
-    MIN_LIQUIDITY_USD: 15000,    // Lowered slightly to catch early gems
-    MIN_VOLUME_24H: 5000,        // Lowered to catch just-launched tokens
-    MIN_TXNS_24H: 10,            
-    MIN_FDV: 5000,              
-    MAX_AGE_HOURS_FOR_NEW: 72    
+    MIN_LIQUIDITY_USD: 1000,     
+    MIN_VOLUME_24H: 500,         
+    MIN_TXNS_24H: 5,             
+    MIN_FDV: 1000,               
+    // MAX_AGE_HOURS_FOR_NEW removed as requirement
 };
 
 // --- EXCLUSION LIST ---
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD',
-    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED'
+    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED', 'MSOL', 'JITOSOL'
 ];
 
-// --- DISCOVERY QUERIES (Expanded for maximum discovery) ---
+// --- [HERE IS THE KEYWORD SEARCH LIST] ---
+// The robot cycles through these terms to find new tokens.
 const TARGET_QUERIES = [
     // 1. Ecosystems
-    'SOL', 'WETH', 'WBNB', 'BASE', 'BSC', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'APTOS', 'SEI',
+    'SOLANA', 'BASE', 'ETHEREUM', 'BSC', 'ARBITRUM', 'AVALANCHE', 'SUI', 'APTOS', 'SEI',
     
-    // 2. Narratives & Keywords
-    'AI', 'AGENT', 'MEME', 'GAMING', 'RWA', 'DEPIN', 'DAO', 'LAYER2', 'ZK', 'METAVERSE',
-    'PUMP', 'MOON', 'GEM', 'SAFE', 'ELON', 'DOGE', 'CAT', 'PEPE', 'INU', 'SWAP', 'FINANCE',
+    // 2. Generic "Meme" Terms (Finds new junk/gold)
+    'DOG', 'CAT', 'INU', 'PEP', 'PEPE', 'COIN', 'MOON', 'SAFE', 'ELON', 'MARS', 
+    'SWAP', 'DAO', 'AI', 'GPT', 'GROK', 'BOT', 'TECH', 'FI', 'PROTOCOL', 'YIELD',
+    'RED', 'BLUE', 'GREEN', 'GOLD', 'SILVER', 'BULL', 'BEAR', 'APE', 'CHAD',
     
-    // 3. Trending & Viral (Specific Tickers)
+    // 3. Trending Tickers (Specifics)
     'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO', 'BABYDOGE', 'DEGEN',
-    'KLAUS', 'RETARDIO', 'VINE', 'CHILL', 'FART', 'SIGMA', 'CHAD',
+    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO', 'BABYDOGE',
+    'DEGEN', 'KLAUS', 'RETARDIO', 'VINE', 'CHILL', 'FART', 'SIGMA', 'CHAD',
     
-    // 4. DeFi & Infra (To find pairs against them)
-    'JUP', 'RAY', 'JITO', 'PYTH', 'RENDER', 'TAO', 'ONDO', 'PENDLE', 'ENA', 'AERO', 'PRIME',
-    
-    // 5. Discovery Keywords
-    'NEW', 'LAUNCH', 'FAIR', 'BULL', 'APE', 'X', 'GROK', 'TESLA', 'SPACE'
+    // 4. Discovery Keywords
+    'NEW', 'LAUNCH', 'FAIR', 'PUMP', 'ALPHA', 'GEM', 'X', 'TESLA', 'SPACE', 'ROCKET'
 ];
 
 // Helpers
@@ -58,8 +57,8 @@ const formatCurrency = (value: number) => {
 const formatPrice = (price: string | number) => {
     const num = typeof price === 'string' ? parseFloat(price) : price;
     if (isNaN(num)) return '$0.00';
-    if (num < 0.0001) return `$${num.toExponential(2)}`;
-    if (num < 1.00) return `$${num.toFixed(6)}`;
+    if (num < 0.000001) return `$${num.toExponential(2)}`;
+    if (num < 0.01) return `$${num.toFixed(6)}`;
     return `$${num.toFixed(2)}`;
 };
 
@@ -115,8 +114,8 @@ export const DatabaseService = {
             const { data: dbData, error } = await supabase
                 .from('market_tokens')
                 .select('*')
-                .order('updated_at', { ascending: false }) 
-                .limit(250); // Increased limit to 250 to allow accumulation
+                .order('pair_created_at', { ascending: false }) // NEWEST FIRST
+                .limit(250);
 
             if (dbData && dbData.length > 0) {
                 return {
@@ -156,14 +155,13 @@ export const DatabaseService = {
                 needsUpdate = true;
             } else {
                 const lastUpdate = new Date(data[0].updated_at).getTime();
-                // Check every 60s max to allow distributed updates
-                if (now - lastUpdate > 60000) {
+                // Check every 15s to keep feed alive
+                if (now - lastUpdate > 15000) {
                     needsUpdate = true;
                 }
             }
 
             if (needsUpdate) {
-                console.log("Background Worker: DB is stale. Running Ingestion Robot...");
                 await DatabaseService.runIngestionRobot();
             }
         } catch (e) {
@@ -175,8 +173,7 @@ export const DatabaseService = {
     runIngestionRobot: async (): Promise<MarketCoin[]> => {
         try {
             // A. Randomized Sector Scan
-            // Increased to 20 sectors per run for deeper discovery
-            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 20);
+            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 30);
             let rawPairs: any[] = [];
 
             // Execute sequentially
@@ -185,7 +182,7 @@ export const DatabaseService = {
                 if (result && result.pairs) {
                     rawPairs = [...rawPairs, ...result.pairs];
                 }
-                await sleep(150); // Fast but polite
+                await sleep(100); 
             }
 
             // B. Deduplicate & Filter
@@ -195,10 +192,14 @@ export const DatabaseService = {
                 const vol = p.volume?.h24 || 0;
                 const symbol = p.baseToken?.symbol?.toUpperCase();
                 
+                // Note: Age filtering removed to allow all tokens
+
                 if (EXCLUDED_SYMBOLS.includes(symbol)) return false;
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
                 if (!p.info?.imageUrl) return false;
+                
+                // NO STRICT AGE CHECK
 
                 if (seenSymbols.has(symbol)) return false;
                 seenSymbols.add(symbol);
@@ -228,14 +229,14 @@ export const DatabaseService = {
 
                 const { error } = await supabase.from('market_tokens').upsert(dbRows, { onConflict: 'pair_address' });
                 if (error) console.error("Supabase Write Error:", error.message);
-                else console.log(`Vault Updated: Added/Updated ${dbRows.length} tokens.`);
+                else console.log(`Vault Updated: ${dbRows.length} NEW tokens added.`);
             }
 
             // D. Return ALL tokens (Accumulated up to 250)
             const { data: allTokens } = await supabase
                 .from('market_tokens')
                 .select('*')
-                .order('updated_at', { ascending: false })
+                .order('pair_created_at', { ascending: false }) // Return newest first
                 .limit(250);
 
             return DatabaseService.mapDbToMarketCoin(allTokens || []);
@@ -275,7 +276,7 @@ export const DatabaseService = {
                 smartMoney: 'Neutral', 
                 smartMoneySignal: 'Neutral',
                 signal: row.price_change_24h > 20 ? 'Breakout' : 'None',
-                riskLevel: row.liquidity_usd < 200000 ? 'Medium' : 'Low',
+                riskLevel: row.liquidity_usd < 100000 ? 'High' : 'Medium',
                 age: getTimeAgo(row.pair_created_at),
                 createdTimestamp: new Date(row.pair_created_at).getTime(),
                 img: row.logo_url,

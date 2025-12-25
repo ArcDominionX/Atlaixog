@@ -41,8 +41,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
-    // Sorting State - Default: DEX Flow (Net Flow) Descending
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'change', direction: 'desc' });
+    // Sorting State - Changed Default to AGE (Newest First)
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdTimestamp', direction: 'desc' });
 
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
@@ -162,6 +162,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             const { key, direction } = sortConfig;
             
             const getValue = (item: MarketCoin) => {
+                if (key === 'createdTimestamp') return item.createdTimestamp; // New Sort Key
                 if (key === 'change') return parseFloat(item.h24.replace('%', '').replace(',', ''));
                 if (key === 'ticker') return item.ticker;
                 if (key === 'price') return parseCurrency(item.price);
@@ -320,6 +321,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                             <thead>
                                 <tr>
                                     <SortHeader label="Chain Token" sortKey="ticker" minWidth="160px" />
+                                    <SortHeader label="Age" sortKey="createdTimestamp" minWidth="80px" />
                                     <SortHeader label="Price" sortKey="price" />
                                     <SortHeader label="Chg 24h" sortKey="change" minWidth="80px" rightAlign />
                                     <SortHeader label="MCap" sortKey="cap" rightAlign />
@@ -359,6 +361,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                                                 </div>
                                             </td>
                                             
+                                            <td className="font-medium text-xs text-text-light">{coin.age}</td>
                                             <td className="font-mono text-xs text-text-light font-medium">{coin.price}</td>
                                             <td className={`font-bold text-xs text-right ${getPercentColor(changeVal)}`}>{changeVal}</td>
                                             <td className="font-medium text-xs text-text-light text-right">{coin.cap}</td>
