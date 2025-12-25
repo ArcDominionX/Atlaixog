@@ -9,40 +9,35 @@ const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseService
 // Using DexScreener Public API
 const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
-// --- RESEARCH & GEM REQUIREMENTS ---
+// --- RESEARCH & GEM REQUIREMENTS (OPTIMIZED FOR LIVE ALPHA) ---
 const REQUIREMENTS = {
-    MIN_LIQUIDITY_USD: 1000,     
-    MIN_VOLUME_24H: 500,         
-    MIN_TXNS_24H: 5,             
-    MIN_FDV: 1000,               
-    // MAX_AGE_HOURS_FOR_NEW removed as requirement
+    MIN_LIQUIDITY_USD: 50000,    // REDUCED to $50k as requested
+    MIN_VOLUME_24H: 10000,       // Reduced from 75k to 10k to catch "Just Launched" tokens
+    MIN_TXNS_24H: 25,            // Reduced to catch early activity
+    MIN_FDV: 5000,               // Reduced to allow micro-caps
+    MAX_AGE_HOURS_FOR_NEW: 168   // 7 Days
 };
 
 // --- EXCLUSION LIST ---
 const EXCLUDED_SYMBOLS = [
-    'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD',
     'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED', 'MSOL', 'JITOSOL'
 ];
 
-// --- [HERE IS THE KEYWORD SEARCH LIST] ---
-// The robot cycles through these terms to find new tokens.
+// --- DISCOVERY QUERIES (High Frequency) ---
 const TARGET_QUERIES = [
-    // 1. Ecosystems
-    'SOLANA', 'BASE', 'ETHEREUM', 'BSC', 'ARBITRUM', 'AVALANCHE', 'SUI', 'APTOS', 'SEI',
+    // 1. Broad Ecosystems (These return the most results)
+    'SOLANA', 'ETHEREUM', 'BASE', 'BSC', 'ARBITRUM', 'AVALANCHE',
     
-    // 2. Generic "Meme" Terms (Finds new junk/gold)
-    'DOG', 'CAT', 'INU', 'PEP', 'PEPE', 'COIN', 'MOON', 'SAFE', 'ELON', 'MARS', 
-    'SWAP', 'DAO', 'AI', 'GPT', 'GROK', 'BOT', 'TECH', 'FI', 'PROTOCOL', 'YIELD',
-    'RED', 'BLUE', 'GREEN', 'GOLD', 'SILVER', 'BULL', 'BEAR', 'APE', 'CHAD',
+    // 2. High Volume Anchors
+    'SOL', 'WETH', 'WBNB', 'PEPE', 'WIF', 'BONK', 'PUMP',
     
-    // 3. Trending Tickers (Specifics)
-    'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO', 'BABYDOGE',
-    'DEGEN', 'KLAUS', 'RETARDIO', 'VINE', 'CHILL', 'FART', 'SIGMA', 'CHAD',
+    // 3. Trending Narratives
+    'AI', 'AGENT', 'MEME', 'CAT', 'DOG', 'TRUMP', 'ELON', 'GAMING',
     
-    // 4. Discovery Keywords
-    'NEW', 'LAUNCH', 'FAIR', 'PUMP', 'ALPHA', 'GEM', 'X', 'TESLA', 'SPACE', 'ROCKET'
+    // 4. Specific Tickers
+    'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
+    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TURBO', 'NEIRO', 'DEGEN'
 ];
 
 // Helpers
@@ -81,7 +76,7 @@ const getChainId = (chainId: string) => {
 // Utility: Sleep to prevent API Rate Limits
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Utility: Shuffle Array to randomize search sectors
+// Utility: Shuffle Array
 const shuffleArray = (array: string[]) => {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -103,33 +98,26 @@ const fetchWithFallbacks = async (query: string): Promise<any> => {
     }
 };
 
+// --- IN-MEMORY CACHE (For speed) ---
+let memoryCache: MarketCoin[] = [];
+let lastFetch = 0;
+
 export const DatabaseService = {
     
     // 1. MAIN FUNCTION CALLED BY DASHBOARD
     getMarketData: async (forceRefresh: boolean = false): Promise<{ data: MarketCoin[], source: string, latency: number }> => {
         const start = performance.now();
 
-        // Step A: Read from Vault
-        try {
-            const { data: dbData, error } = await supabase
-                .from('market_tokens')
-                .select('*')
-                .order('pair_created_at', { ascending: false }) // NEWEST FIRST
-                .limit(250);
-
-            if (dbData && dbData.length > 0) {
-                return {
-                    data: DatabaseService.mapDbToMarketCoin(dbData),
-                    source: 'SUPABASE_DB',
-                    latency: Math.round(performance.now() - start)
-                };
-            }
-        } catch (err) {
-            console.warn("Database Connection Issue:", err);
+        // Use memory cache if fresh ( < 10 seconds )
+        if (!forceRefresh && memoryCache.length > 0 && (Date.now() - lastFetch < 10000)) {
+            return {
+                data: memoryCache,
+                source: 'MEMORY_CACHE',
+                latency: Math.round(performance.now() - start)
+            };
         }
 
-        // Step B: If Vault empty, trigger robot
-        console.log("Vault empty. Triggering immediate ingestion...");
+        // Trigger immediate fetch
         const freshData = await DatabaseService.runIngestionRobot();
         
         return {
@@ -139,67 +127,49 @@ export const DatabaseService = {
         };
     },
 
-    // 2. BACKGROUND CHECKER (Called by App.tsx Global Worker)
+    // 2. BACKGROUND CHECKER
     checkAndTriggerIngestion: async () => {
-        try {
-            const { data, error } = await supabase
-                .from('market_tokens')
-                .select('updated_at')
-                .order('updated_at', { ascending: false })
-                .limit(1);
-
-            const now = Date.now();
-            let needsUpdate = false;
-
-            if (error || !data || data.length === 0) {
-                needsUpdate = true;
-            } else {
-                const lastUpdate = new Date(data[0].updated_at).getTime();
-                // Check every 15s to keep feed alive
-                if (now - lastUpdate > 15000) {
-                    needsUpdate = true;
-                }
-            }
-
-            if (needsUpdate) {
-                await DatabaseService.runIngestionRobot();
-            }
-        } catch (e) {
-            console.error("Background sync failed", e);
+        // Runs aggressively to keep cache populated
+        if (Date.now() - lastFetch > 15000) {
+            await DatabaseService.runIngestionRobot();
         }
     },
 
-    // 3. THE ROBOT (Fetches, Filters, Saves to DB)
+    // 3. THE ROBOT (Optimized for Speed)
     runIngestionRobot: async (): Promise<MarketCoin[]> => {
         try {
-            // A. Randomized Sector Scan
-            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 30);
+            // A. Randomized Sector Scan - Increased count to fill list
+            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 15);
             let rawPairs: any[] = [];
 
-            // Execute sequentially
-            for (const query of shuffledQueries) {
-                const result = await fetchWithFallbacks(query);
-                if (result && result.pairs) {
-                    rawPairs = [...rawPairs, ...result.pairs];
-                }
-                await sleep(100); 
+            // Execute in batches for speed
+            const batch1 = shuffledQueries.slice(0, 8).map(q => fetchWithFallbacks(q));
+            const results1 = await Promise.all(batch1);
+            
+            results1.forEach(r => { if(r.pairs) rawPairs.push(...r.pairs); });
+            
+            // If we don't have enough, fetch more
+            if (rawPairs.length < 50) {
+                 const batch2 = shuffledQueries.slice(8, 15).map(q => fetchWithFallbacks(q));
+                 const results2 = await Promise.all(batch2);
+                 results2.forEach(r => { if(r.pairs) rawPairs.push(...r.pairs); });
             }
 
             // B. Deduplicate & Filter
             const seenSymbols = new Set();
+            
+            // Sort raw pairs by CREATED AT descending (Newest first) before filtering
+            rawPairs.sort((a, b) => (b.pairCreatedAt || 0) - (a.pairCreatedAt || 0));
+
             const cleanPairs = rawPairs.filter(p => {
                 const liq = p.liquidity?.usd || 0;
                 const vol = p.volume?.h24 || 0;
                 const symbol = p.baseToken?.symbol?.toUpperCase();
                 
-                // Note: Age filtering removed to allow all tokens
-
                 if (EXCLUDED_SYMBOLS.includes(symbol)) return false;
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
                 if (!p.info?.imageUrl) return false;
-                
-                // NO STRICT AGE CHECK
 
                 if (seenSymbols.has(symbol)) return false;
                 seenSymbols.add(symbol);
@@ -207,7 +177,14 @@ export const DatabaseService = {
                 return true;
             });
 
-            // C. Save to Supabase (Upsert to accumulate)
+            // C. Map to MarketCoin Object
+            const mappedCoins = DatabaseService.mapDbToMarketCoin(cleanPairs);
+            
+            // Update Memory Cache Immediately (Fastest UI response)
+            memoryCache = mappedCoins;
+            lastFetch = Date.now();
+
+            // D. Background Save to Supabase (Don't await this to block UI)
             if (cleanPairs.length > 0) {
                 const dbRows = cleanPairs.map(p => ({
                     pair_address: p.pairAddress,
@@ -227,63 +204,71 @@ export const DatabaseService = {
                     updated_at: new Date().toISOString()
                 }));
 
-                const { error } = await supabase.from('market_tokens').upsert(dbRows, { onConflict: 'pair_address' });
-                if (error) console.error("Supabase Write Error:", error.message);
-                else console.log(`Vault Updated: ${dbRows.length} NEW tokens added.`);
+                // Fire and forget
+                supabase.from('market_tokens').upsert(dbRows, { onConflict: 'pair_address' }).then(({ error }) => {
+                    if (error) console.error("DB Sync Error:", error.message);
+                });
             }
 
-            // D. Return ALL tokens (Accumulated up to 250)
-            const { data: allTokens } = await supabase
-                .from('market_tokens')
-                .select('*')
-                .order('pair_created_at', { ascending: false }) // Return newest first
-                .limit(250);
-
-            return DatabaseService.mapDbToMarketCoin(allTokens || []);
+            return mappedCoins;
 
         } catch (e) {
             console.error("Ingestion Failed", e);
-            return [];
+            return memoryCache; // Return stale cache if fetch fails
         }
     },
 
-    // 4. MAPPER (DB Row -> UI Component)
-    mapDbToMarketCoin: (dbRows: any[]): MarketCoin[] => {
-        return dbRows.map((row, index) => {
-            const buys = row.buy_volume_24h || 0;
-            const sells = row.sell_volume_24h || 0;
+    // 4. MAPPER (Raw DexScreener -> UI Component)
+    mapDbToMarketCoin: (rawPairs: any[]): MarketCoin[] => {
+        return rawPairs.map((p, index) => {
+            // Check if it's from DB (snake_case) or API (camelCase)
+            const isDb = !!p.pair_created_at;
+            
+            const vol = isDb ? p.volume_24h : (p.volume?.h24 || 0);
+            const buys = isDb ? p.buy_volume_24h : (p.txns?.h24?.buys || 0);
+            const sells = isDb ? p.sell_volume_24h : (p.txns?.h24?.sells || 0);
+            const price = isDb ? p.price_usd : (parseFloat(p.priceUsd) || 0);
+            const change = isDb ? p.price_change_24h : (p.priceChange?.h24 || 0);
+            const liq = isDb ? p.liquidity_usd : (p.liquidity?.usd || 0);
+            const fdv = isDb ? p.fdv : (p.fdv || 0);
+            const created = isDb ? new Date(p.pair_created_at).getTime() : (p.pairCreatedAt || Date.now());
+            const sym = isDb ? p.symbol : p.baseToken?.symbol;
+            const name = isDb ? p.name : p.baseToken?.name;
+            const chain = isDb ? p.chain : p.chainId;
+            const addr = isDb ? p.pair_address : p.pairAddress;
+            const img = isDb ? p.logo_url : p.info?.imageUrl;
+
             const total = buys + sells;
             const flowScore = total > 0 ? Math.round((buys / total) * 100) : 50;
-            
-            const netFlowVal = (row.volume_24h * ((flowScore - 50) / 100));
+            const netFlowVal = (vol * ((flowScore - 50) / 100));
             const netFlowStr = (netFlowVal >= 0 ? '+' : '-') + formatCurrency(Math.abs(netFlowVal));
             
             return {
                 id: index,
-                name: row.name,
-                ticker: row.symbol,
-                price: formatPrice(row.price_usd),
+                name: name,
+                ticker: sym,
+                price: formatPrice(price),
                 h1: '0.00%',
-                h24: `${row.price_change_24h?.toFixed(2)}%`,
+                h24: `${change?.toFixed(2)}%`,
                 d7: '0.00%',
-                cap: formatCurrency(row.fdv),
-                liquidity: formatCurrency(row.liquidity_usd),
-                volume24h: formatCurrency(row.volume_24h),
+                cap: formatCurrency(fdv),
+                liquidity: formatCurrency(liq),
+                volume24h: formatCurrency(vol),
                 dexBuys: buys.toString(),
                 dexSells: sells.toString(),
                 dexFlow: flowScore,
                 netFlow: netFlowStr,
                 smartMoney: 'Neutral', 
                 smartMoneySignal: 'Neutral',
-                signal: row.price_change_24h > 20 ? 'Breakout' : 'None',
-                riskLevel: row.liquidity_usd < 100000 ? 'High' : 'Medium',
-                age: getTimeAgo(row.pair_created_at),
-                createdTimestamp: new Date(row.pair_created_at).getTime(),
-                img: row.logo_url,
-                trend: row.price_change_24h >= 0 ? 'Bullish' : 'Bearish',
-                chain: getChainId(row.chain),
-                address: row.pair_address, 
-                pairAddress: row.pair_address
+                signal: change > 20 ? 'Breakout' : 'None',
+                riskLevel: liq < 100000 ? 'High' : 'Medium',
+                age: getTimeAgo(created),
+                createdTimestamp: created,
+                img: img,
+                trend: change >= 0 ? 'Bullish' : 'Bearish',
+                chain: getChainId(chain),
+                address: addr, 
+                pairAddress: addr
             };
         });
     },

@@ -41,7 +41,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
-    // Sorting State - Changed Default to AGE (Newest First)
+    // Sorting State - Default to NEWEST
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdTimestamp', direction: 'desc' });
 
     // Data & System State
@@ -55,8 +55,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
 
     // Load Data Function
     const loadData = async (force: boolean = false) => {
-        // Only show spinner on initial load, not background refreshes
-        if (marketData.length === 0) setIsLoading(true);
+        // Only show spinner on initial load or manual force
+        if (marketData.length === 0 || force) setIsLoading(true);
         
         try {
             const response = await DatabaseService.getMarketData(force);
@@ -74,10 +74,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     useEffect(() => {
         loadData(); // Initial load
 
-        // Auto-refresh every 15 seconds to keep UI in sync with the background worker
+        // Auto-refresh every 10 seconds for "Fast" updates
         const interval = setInterval(() => {
             loadData(false); // Passive refresh
-        }, 15000);
+        }, 10000);
 
         return () => clearInterval(interval);
     }, [timeFrame]); 
