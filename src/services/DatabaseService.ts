@@ -9,14 +9,12 @@ const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseService
 // Using DexScreener Public API
 const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
-// --- RESEARCH & GEM REQUIREMENTS (The Hard Gates) ---
+// --- RESEARCH & GEM REQUIREMENTS ---
 const REQUIREMENTS = {
-    // Adjusted to $25k to ensure table populates. 
-    // High quality tokens will still float to top via sort.
-    MIN_LIQUIDITY_USD: 25000,    
-    MIN_VOLUME_24H: 10000,       
-    MIN_TXNS_24H: 15,            
-    MIN_FDV: 10000,              
+    MIN_LIQUIDITY_USD: 15000,    // Lowered slightly to catch early gems
+    MIN_VOLUME_24H: 5000,        // Lowered to catch just-launched tokens
+    MIN_TXNS_24H: 10,            
+    MIN_FDV: 5000,              
     MAX_AGE_HOURS_FOR_NEW: 72    
 };
 
@@ -24,17 +22,28 @@ const REQUIREMENTS = {
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD',
-    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH'
+    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED'
 ];
 
-// --- DISCOVERY QUERIES (The Robot's Search Path) ---
+// --- DISCOVERY QUERIES (Expanded for maximum discovery) ---
 const TARGET_QUERIES = [
-    'SOL', 'WETH', 'WBNB', 'BASE', 'BSC', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM',
-    'AI', 'AGENT', 'MEME', 'GAMING', 'RWA', 'DEPIN', 'DAO', 'LAYER2',
-    'PEPE', 'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO',
-    'VINE', 'CHILL', 'FART', 'DOGE', 'SHIB', 'KLAUS', 'RETARDIO',
-    'DEFI', 'HOT', 'TRENDING', 'NEW', 'ALPHA'
+    // 1. Ecosystems
+    'SOL', 'WETH', 'WBNB', 'BASE', 'BSC', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'APTOS', 'SEI',
+    
+    // 2. Narratives & Keywords
+    'AI', 'AGENT', 'MEME', 'GAMING', 'RWA', 'DEPIN', 'DAO', 'LAYER2', 'ZK', 'METAVERSE',
+    'PUMP', 'MOON', 'GEM', 'SAFE', 'ELON', 'DOGE', 'CAT', 'PEPE', 'INU', 'SWAP', 'FINANCE',
+    
+    // 3. Trending & Viral (Specific Tickers)
+    'WIF', 'BONK', 'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
+    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO', 'BABYDOGE', 'DEGEN',
+    'KLAUS', 'RETARDIO', 'VINE', 'CHILL', 'FART', 'SIGMA', 'CHAD',
+    
+    // 4. DeFi & Infra (To find pairs against them)
+    'JUP', 'RAY', 'JITO', 'PYTH', 'RENDER', 'TAO', 'ONDO', 'PENDLE', 'ENA', 'AERO', 'PRIME',
+    
+    // 5. Discovery Keywords
+    'NEW', 'LAUNCH', 'FAIR', 'BULL', 'APE', 'X', 'GROK', 'TESLA', 'SPACE'
 ];
 
 // Helpers
@@ -101,41 +110,27 @@ export const DatabaseService = {
     getMarketData: async (forceRefresh: boolean = false): Promise<{ data: MarketCoin[], source: string, latency: number }> => {
         const start = performance.now();
 
-        // Step A: Check Supabase "Vault" first
-        if (!forceRefresh) {
-            try {
-                const { data: dbData, error } = await supabase
-                    .from('market_tokens')
-                    .select('*')
-                    .order('updated_at', { ascending: false }) // Show recently scanned tokens first
-                    .limit(100);
+        // Step A: Read from Vault
+        try {
+            const { data: dbData, error } = await supabase
+                .from('market_tokens')
+                .select('*')
+                .order('updated_at', { ascending: false }) 
+                .limit(250); // Increased limit to 250 to allow accumulation
 
-                if (error) {
-                    console.warn("Supabase Read Error:", error.message);
-                } else if (dbData && dbData.length > 0) {
-                    const oldestUpdate = new Date(dbData[0].updated_at).getTime();
-                    const now = Date.now();
-                    
-                    // Cache duration: 60s
-                    // If DB has less than 50 items (was 20), FORCE REFRESH to keep filling the table
-                    if ((now - oldestUpdate) < (60 * 1000) && dbData.length >= 50) {
-                        console.log("Serving from Supabase Vault (Fast)");
-                        return {
-                            data: DatabaseService.mapDbToMarketCoin(dbData),
-                            source: 'SUPABASE_DB',
-                            latency: Math.round(performance.now() - start)
-                        };
-                    } else {
-                        console.log("Vault exists but insufficient data (< 50). Triggering robot.");
-                    }
-                }
-            } catch (err) {
-                console.warn("Database Connection Issue:", err);
+            if (dbData && dbData.length > 0) {
+                return {
+                    data: DatabaseService.mapDbToMarketCoin(dbData),
+                    source: 'SUPABASE_DB',
+                    latency: Math.round(performance.now() - start)
+                };
             }
+        } catch (err) {
+            console.warn("Database Connection Issue:", err);
         }
 
-        // Step B: If Vault is empty, old, or error -> Run the Robot (Ingest)
-        console.log("Running Ingestion Robot...");
+        // Step B: If Vault empty, trigger robot
+        console.log("Vault empty. Triggering immediate ingestion...");
         const freshData = await DatabaseService.runIngestionRobot();
         
         return {
@@ -145,47 +140,73 @@ export const DatabaseService = {
         };
     },
 
-    // 2. THE ROBOT (Fetches, Filters, Saves to DB)
+    // 2. BACKGROUND CHECKER (Called by App.tsx Global Worker)
+    checkAndTriggerIngestion: async () => {
+        try {
+            const { data, error } = await supabase
+                .from('market_tokens')
+                .select('updated_at')
+                .order('updated_at', { ascending: false })
+                .limit(1);
+
+            const now = Date.now();
+            let needsUpdate = false;
+
+            if (error || !data || data.length === 0) {
+                needsUpdate = true;
+            } else {
+                const lastUpdate = new Date(data[0].updated_at).getTime();
+                // Check every 60s max to allow distributed updates
+                if (now - lastUpdate > 60000) {
+                    needsUpdate = true;
+                }
+            }
+
+            if (needsUpdate) {
+                console.log("Background Worker: DB is stale. Running Ingestion Robot...");
+                await DatabaseService.runIngestionRobot();
+            }
+        } catch (e) {
+            console.error("Background sync failed", e);
+        }
+    },
+
+    // 3. THE ROBOT (Fetches, Filters, Saves to DB)
     runIngestionRobot: async (): Promise<MarketCoin[]> => {
         try {
-            // A. Randomized Sector Scan (Rate Limit Protection)
-            // Increased to 15 sectors per run to cast a wider net
-            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 15);
-            
+            // A. Randomized Sector Scan
+            // Increased to 20 sectors per run for deeper discovery
+            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 20);
             let rawPairs: any[] = [];
 
-            // Execute sequentially with delay to be polite to DexScreener
+            // Execute sequentially
             for (const query of shuffledQueries) {
                 const result = await fetchWithFallbacks(query);
                 if (result && result.pairs) {
                     rawPairs = [...rawPairs, ...result.pairs];
                 }
-                // Reduced delay to 200ms for slightly faster ingestion
-                await sleep(200); 
+                await sleep(150); // Fast but polite
             }
 
-            // B. Deduplicate & Filter "The Trash"
+            // B. Deduplicate & Filter
             const seenSymbols = new Set();
             const cleanPairs = rawPairs.filter(p => {
                 const liq = p.liquidity?.usd || 0;
                 const vol = p.volume?.h24 || 0;
-                const fdv = p.fdv || 0;
                 const symbol = p.baseToken?.symbol?.toUpperCase();
                 
-                // Exclude junk
                 if (EXCLUDED_SYMBOLS.includes(symbol)) return false;
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
-                if (!p.info?.imageUrl) return false; // Must have logo
+                if (!p.info?.imageUrl) return false;
 
-                // Dedupe
                 if (seenSymbols.has(symbol)) return false;
                 seenSymbols.add(symbol);
 
                 return true;
             });
 
-            // C. Save to Supabase (The Vault)
+            // C. Save to Supabase (Upsert to accumulate)
             if (cleanPairs.length > 0) {
                 const dbRows = cleanPairs.map(p => ({
                     pair_address: p.pairAddress,
@@ -210,13 +231,12 @@ export const DatabaseService = {
                 else console.log(`Vault Updated: Added/Updated ${dbRows.length} tokens.`);
             }
 
-            // D. CRITICAL FIX: Return ALL tokens from DB, not just the new ones.
-            // This enables the "Snowball Effect" - the list grows every time the robot runs.
+            // D. Return ALL tokens (Accumulated up to 250)
             const { data: allTokens } = await supabase
                 .from('market_tokens')
                 .select('*')
                 .order('updated_at', { ascending: false })
-                .limit(100);
+                .limit(250);
 
             return DatabaseService.mapDbToMarketCoin(allTokens || []);
 
@@ -226,7 +246,7 @@ export const DatabaseService = {
         }
     },
 
-    // 3. MAPPER (DB Row -> UI Component)
+    // 4. MAPPER (DB Row -> UI Component)
     mapDbToMarketCoin: (dbRows: any[]): MarketCoin[] => {
         return dbRows.map((row, index) => {
             const buys = row.buy_volume_24h || 0;
@@ -234,7 +254,6 @@ export const DatabaseService = {
             const total = buys + sells;
             const flowScore = total > 0 ? Math.round((buys / total) * 100) : 50;
             
-            // Heuristic for Net Flow visual
             const netFlowVal = (row.volume_24h * ((flowScore - 50) / 100));
             const netFlowStr = (netFlowVal >= 0 ? '+' : '-') + formatCurrency(Math.abs(netFlowVal));
             
@@ -243,7 +262,7 @@ export const DatabaseService = {
                 name: row.name,
                 ticker: row.symbol,
                 price: formatPrice(row.price_usd),
-                h1: '0.00%', // DB simplified, only stores 24h
+                h1: '0.00%',
                 h24: `${row.price_change_24h?.toFixed(2)}%`,
                 d7: '0.00%',
                 cap: formatCurrency(row.fdv),
@@ -268,7 +287,7 @@ export const DatabaseService = {
         });
     },
 
-    // 4. Token Detail Fetcher (Pass-through to DexScreener for deep dive)
+    // 5. Token Detail Fetcher
     getTokenDetails: async (query: string): Promise<any> => {
         const result = await fetchWithFallbacks(query);
         if (result && result.pairs && result.pairs.length > 0) {
