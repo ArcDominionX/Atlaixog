@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, Plus, Search, ChevronRight, ChevronLeft, Settings, Database, Server, Flame, ArrowUpRight, ArrowDownRight, Clock, Info, RefreshCw, Wifi } from 'lucide-react';
+import { Activity, Zap, TrendingUp, ShieldCheck, Scan, Wallet, Bell, ChevronDown, Plus, Search, ChevronRight, ChevronLeft, Settings, Database, Server, Flame, ArrowUpRight, ArrowDownRight, Clock, Info, RefreshCw, Wifi } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DualRangeSlider } from '../components/DualRangeSlider';
 import { DatabaseService } from '../services/DatabaseService';
@@ -16,6 +16,10 @@ interface DashboardProps {
 const parseCurrency = (val: string | number) => {
     if (typeof val === 'number') return val;
     if (!val) return 0;
+    
+    // Check for negative sign before stripping characters
+    const isNegative = val.toString().includes('-');
+    
     let clean = val.toString().replace(/[$,]/g, '');
     let multiplier = 1;
     if (clean.includes('T')) multiplier = 1e12;
@@ -23,8 +27,10 @@ const parseCurrency = (val: string | number) => {
     else if (clean.includes('M')) multiplier = 1e6;
     else if (clean.includes('K')) multiplier = 1e3;
     
-    clean = clean.replace(/[TBMK%]/g, '');
-    return parseFloat(clean) * multiplier;
+    clean = clean.replace(/[TBMK%+\-]/g, ''); // Remove +, -, %, letters
+    
+    let result = parseFloat(clean) * multiplier;
+    return isNegative ? -result : result;
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
@@ -159,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                 if (key === 'volume') return parseCurrency(item.volume24h);
                 if (key === 'dexBuys') return parseCurrency(item.dexBuys);
                 if (key === 'dexSells') return parseCurrency(item.dexSells);
-                if (key === 'netFlow') return parseCurrency(item.netFlow.replace('+', ''));
+                if (key === 'netFlow') return parseCurrency(item.netFlow);
                 return 0;
             };
 
@@ -172,6 +178,101 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             return direction === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
         });
     }, [marketData, sortConfig]);
+
+    // --- AI MARKET PULSE LOGIC ---
+    const marketPulse = useMemo(() => {
+        // Defaults if no data
+        if (!marketData.length) return {
+            sentimentScore: 50,
+            sentimentLabel: "Neutral",
+            topInflowToken: null,
+            bestChain: "Ethereum",
+            bestChainFlow: 0,
+            riskCount: 0
+        };
+
+        // 1. Calculate Sentiment (Global Crypto Market State from Feed)
+        let bullishCount = 0;
+        let totalProcessed = 0;
+        let totalMarketVolume = 0;
+        
+        marketData.forEach(coin => {
+            const h24 = parseFloat(coin.h24.replace('%', ''));
+            const volume = parseCurrency(coin.volume24h);
+            
+            if (h24 > 0) bullishCount++;
+            
+            totalMarketVolume += volume;
+            totalProcessed++;
+        });
+
+        // Base score starts at 50
+        const bullRatio = totalProcessed > 0 ? bullishCount / totalProcessed : 0.5;
+        // Volume impact: If volume is high, sentiment is stronger. 
+        // We normalize volume loosely (assuming 50M is a "high" aggregate for a feed of gems)
+        const volumeFactor = Math.min(totalMarketVolume / 50000000, 1) * 10; 
+        
+        let sentimentScore = Math.round((bullRatio * 80) + 10 + volumeFactor);
+        // Clamp
+        if (sentimentScore > 98) sentimentScore = 98;
+        if (sentimentScore < 5) sentimentScore = 5;
+        
+        let sentimentLabel = "Neutral";
+        if (sentimentScore >= 75) sentimentLabel = "Extreme Greed";
+        else if (sentimentScore >= 60) sentimentLabel = "Bullish";
+        else if (sentimentScore <= 25) sentimentLabel = "Extreme Fear";
+        else if (sentimentScore <= 40) sentimentLabel = "Bearish";
+
+        // 2. Find Top Inflow Token (Absolute Highest Net Flow)
+        // We sort by Net Flow descending
+        const tokensByFlow = [...marketData].sort((a, b) => parseCurrency(b.netFlow) - parseCurrency(a.netFlow));
+        const topToken = tokensByFlow[0] || null;
+
+        // 3. Smart Rotation (Highest Performing Blockchain by Volume)
+        const chainStats: Record<string, number> = {
+            'solana': 0,
+            'ethereum': 0,
+            'bsc': 0,
+            'base': 0
+        };
+
+        marketData.forEach(coin => {
+            const chainKey = coin.chain.toLowerCase();
+            const volume = parseCurrency(coin.volume24h);
+            
+            // Normalize chain keys
+            if (chainKey.includes('sol')) chainStats['solana'] += volume;
+            else if (chainKey.includes('eth')) chainStats['ethereum'] += volume;
+            else if (chainKey.includes('bsc') || chainKey.includes('bnb')) chainStats['bsc'] += volume;
+            else if (chainKey.includes('base')) chainStats['base'] += volume;
+        });
+
+        let bestChain = "Ethereum";
+        let maxChainVol = -1;
+
+        Object.entries(chainStats).forEach(([chain, vol]) => {
+            if (vol > maxChainVol) {
+                maxChainVol = vol;
+                bestChain = chain.charAt(0).toUpperCase() + chain.slice(1);
+            }
+        });
+        
+        // Manual override for display nice names
+        if (bestChain === 'Bsc') bestChain = 'BSC';
+
+        // 4. Risk (Requested: 0 Critical Risks)
+        const riskCount = 0;
+
+        return {
+            sentimentScore,
+            sentimentLabel,
+            topInflowToken: topToken,
+            bestChain,
+            bestChainFlow: maxChainVol,
+            riskCount
+        };
+
+    }, [marketData]);
 
     // Pagination Logic
     const totalPages = Math.ceil(sortedData.length / itemsPerPage);
@@ -212,6 +313,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             case 'xrp': return 'https://cryptologos.cc/logos/xrp-xrp-logo.png';
             default: return 'https://via.placeholder.com/20';
         }
+    };
+
+    const formatCompactCurrency = (num: number) => {
+        if (Math.abs(num) >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+        if (Math.abs(num) >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (Math.abs(num) >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toFixed(0);
     };
 
     // Sort Header Component
@@ -413,50 +521,68 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                 </div>
             </div>
 
-            {/* 3. AI Market Pulse */}
+            {/* 3. AI Market Pulse (Dynamic) */}
             <div className="w-full relative z-20">
                 <h3 className="text-base font-bold mb-4 text-text-light">AI Market Pulse</h3>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                    
+                    {/* Sentiment Card */}
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <Activity size={14} className="text-text-medium" /> AI Sentiment
                         </div>
-                        <div className="text-[10px] text-text-dark font-medium uppercase tracking-wide">Sentiment score</div>
+                        <div className="text-[10px] text-text-dark font-medium uppercase tracking-wide">Market Score</div>
                         <div className="text-base md:text-lg font-bold text-text-light flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-primary-green text-main flex items-center justify-center text-[10px] font-extrabold shadow-[0_0_10px_rgba(38,211,86,0.2)]">62</div>
-                            <span className="leading-tight text-sm">Turning Bullish</span>
+                            <div 
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-[0_0_10px_rgba(38,211,86,0.2)] ${marketPulse.sentimentScore >= 50 ? 'bg-primary-green text-main' : 'bg-primary-red text-white'}`}
+                            >
+                                {marketPulse.sentimentScore}
+                            </div>
+                            <span className="leading-tight text-sm truncate">{marketPulse.sentimentLabel}</span>
                         </div>
                     </div>
+                    
+                    {/* Smart Rotation Card */}
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <Zap size={14} className="text-text-medium" /> Smart Rotation
                         </div>
-                        <div className="text-[10px] text-text-dark font-medium uppercase tracking-wide">Top flow 24h</div>
+                        <div className="text-[10px] text-text-dark font-medium uppercase tracking-wide">Highest Vol Chain</div>
                         <div className="text-sm md:text-base font-bold text-text-light flex flex-wrap items-center gap-1.5">
-                            Solana <span className="text-[9px] text-primary-green font-bold px-1.5 py-0.5 rounded bg-primary-green/10 whitespace-nowrap">+8% inflow</span>
+                            {marketPulse.bestChain} 
+                            <span className="text-[9px] text-primary-green font-bold px-1.5 py-0.5 rounded bg-primary-green/10 whitespace-nowrap">
+                                ${formatCompactCurrency(marketPulse.bestChainFlow)} Vol
+                            </span>
                         </div>
                     </div>
                     
-                    {/* Top Inflow Card (Fixed layout for tablet) */}
+                    {/* Top Inflow Card (Dynamic) */}
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                             <TrendingUp size={14} className="text-text-medium" /> Top Inflow
                         </div>
-                        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center w-full font-bold text-sm md:text-base gap-1">
-                            <span className="truncate">$RYU</span>
-                            <span className="text-primary-green text-xs md:text-sm whitespace-nowrap">+$1.42K</span>
+                        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center w-full font-bold text-sm md:text-base gap-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => marketPulse.topInflowToken && onTokenSelect && onTokenSelect(marketPulse.topInflowToken)}>
+                            <span className="truncate">{marketPulse.topInflowToken?.ticker || "Scanning..."}</span>
+                            <span className="text-primary-green text-xs md:text-sm whitespace-nowrap">
+                                {marketPulse.topInflowToken?.netFlow || "$0"}
+                            </span>
                         </div>
                         <div className="mt-0.5 flex justify-start">
-                            <span className="px-1.5 py-0.5 rounded bg-primary-green/10 text-primary-green text-[9px] font-bold">Low Risk</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${marketPulse.topInflowToken?.riskLevel === 'Low' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-yellow/10 text-primary-yellow'}`}>
+                                {marketPulse.topInflowToken?.riskLevel || 'Low'} Risk
+                            </span>
                         </div>
                     </div>
                     
+                    {/* Risk Alerts Card (Hardcoded Safe) */}
                     <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-center gap-1.5 shadow-sm">
                         <div className="flex items-center gap-1.5 text-xs font-medium text-text-medium mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
-                            <ShieldAlert size={14} className="text-text-medium" /> Risk Levels
+                            <ShieldCheck size={14} className="text-primary-green" /> Risk Levels
                         </div>
-                        <div className="text-sm md:text-lg font-bold text-primary-red">3 Critical Alerts</div>
-                        <button className="mt-1.5 w-full bg-primary-yellow/10 border border-primary-yellow/30 text-primary-yellow text-[9px] md:text-[10px] font-bold py-1.5 rounded hover:bg-primary-yellow hover:text-main transition-colors uppercase tracking-wide">View Alerts</button>
+                        <div className="text-sm md:text-lg font-bold text-primary-green">0 Critical Risks</div>
+                        <button className="mt-1.5 w-full bg-primary-green/10 border border-primary-green/30 text-primary-green text-[9px] md:text-[10px] font-bold py-1.5 rounded hover:bg-primary-green hover:text-main transition-colors uppercase tracking-wide">
+                            System Healthy
+                        </button>
                     </div>
                 </div>
             </div>
