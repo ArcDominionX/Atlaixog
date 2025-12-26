@@ -32,27 +32,35 @@ const EXCLUDED_SYMBOLS = [
     'USDE', 'FDUSD', 'WRAPPED', 'MSOL', 'JITOSOL', 'SLERF'
 ];
 
-// --- DISCOVERY QUERIES ---
-// Focusing on high-quality narratives and ecosystems.
+// --- EXPANDED DISCOVERY QUERIES ---
+// Massive list of keywords to "fish" for tokens in different sectors
 const TARGET_QUERIES = [
-    // 1. Major Ecosystems (Broad Search)
-    'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM',
+    // 1. Chains & Majors
+    'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'TRON',
     
-    // 2. High-Quality DeFi & Infra Sectors
-    'AI', 'AGENT', 'DEPIN', 'RWA', 'GAMING', 'LAYER2', 'COMPUTE', 'DATA', 'ZK', 'DAO',
+    // 2. Common Tickers & Memes (The "Long Tail")
+    'PEPE', 'DOGE', 'SHIB', 'FLOKI', 'BONK', 'WIF', 'MOG', 'TRUMP', 'MAGA', 'BIDEN', 
+    'ELON', 'MOON', 'SAFE', 'CAT', 'DOG', 'INU', 'APE', 'KONG', 'FROG', 'TOAD',
     
-    // 3. Leading Assets (Finding pairs trading against them)
-    'USDC', 'USDT', 'PENDLE', 'ONDO', 'RENDER', 'JUP', 'RAY',
+    // 3. Concepts & Tech
+    'AI', 'GPT', 'BOT', 'AGENT', 'TECH', 'DATA', 'COMPUTE', 'CLOUD', 'DEPIN', 'RWA',
+    'GAMING', 'GAME', 'PLAY', 'WIN', 'BET', 'CASINO', 'LUCK', 'HIGH', 'LOW',
     
-    // 4. Established/Trending Anchors (High volume leaders)
-    'WIF', 'BONK', 'PEPE', 'POPCAT', 'GOAT', 'MOODENG', 'ACT', 'PNUT',
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO'
+    // 4. DeFi Terms
+    'SWAP', 'DEX', 'FINANCE', 'PROTOCOL', 'YIELD', 'FARM', 'STAKE', 'DAO', 'LEND', 'BORROW',
+    'GOLD', 'SILVER', 'PUMP', 'DUMP', 'SHORT', 'LONG', 'BULL', 'BEAR',
+    
+    // 5. Random Common Syllables (To find fresh random tickers)
+    'NEO', 'MATRIX', 'META', 'VERSE', 'WORLD', 'STAR', 'GALAXY', 'SPACE', 'MARS',
+    'RED', 'BLUE', 'GREEN', 'BLACK', 'WHITE', 'ORANGE', 'PURPLE',
+    'SUPER', 'ULTRA', 'MEGA', 'GIGA', 'TERA', 'HYPER', 'CYBER', 'PIXEL',
+    'BOY', 'GIRL', 'MAN', 'WOMAN', 'KING', 'QUEEN', 'PRINCE', 'LORD'
 ];
 
 // --- SMART ROTATION STATE ---
 let currentQueryIndex = 0;
-const BATCH_SIZE_BACKGROUND = 4; // Requests per background tick
-const BATCH_SIZE_FULL = 10; // Increased concurrent requests to fill list faster
+const BATCH_SIZE_BACKGROUND = 5; 
+const BATCH_SIZE_FULL = 15; // Scan 15 different keywords at once to fill list
 
 // Helpers
 const formatCurrency = (value: number) => {
@@ -71,7 +79,6 @@ const formatPrice = (price: string | number) => {
     return `$${num.toFixed(2)}`;
 };
 
-// Helper to parse formatted currency back to number for filtering
 const parseFormattedValue = (val: string): number => {
     if (!val) return 0;
     const clean = val.replace(/[$,]/g, '');
@@ -95,6 +102,19 @@ const getChainId = (chainId: string) => {
     if (chainId === 'bsc') return 'bsc';
     if (chainId === 'base') return 'base';
     return 'ethereum'; 
+};
+
+// Returns a random subset of the array
+const getRandomSubarray = (arr: string[], size: number) => {
+    const shuffled = arr.slice(0);
+    let i = arr.length, temp, index;
+    while (i--) {
+        index = Math.floor(Math.random() * (i + 1));
+        temp = shuffled[index];
+        shuffled[index] = shuffled[i];
+        shuffled[i] = temp;
+    }
+    return shuffled.slice(0, size);
 };
 
 // API Response Types
@@ -134,7 +154,6 @@ const fetchWithFallbacks = async (query: string): Promise<any> => {
     }
 };
 
-// Helper to batch promises
 const chunkArray = (arr: string[], size: number) => {
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
         arr.slice(i * size, i * size + size)
@@ -150,7 +169,6 @@ export const DatabaseService = {
     getMarketData: async (force: boolean = false, partial: boolean = false): Promise<{ data: MarketCoin[], source: 'LIVE_API' | 'CACHE' | 'SUPABASE', latency: number }> => {
         const start = performance.now();
         
-        // Serve from cache if fresh AND we are not in partial background mode
         if (!force && !partial && cache.marketData) {
             const age = Date.now() - cache.marketData.timestamp;
             if (age < CACHE_FRESH_DURATION) {
@@ -163,33 +181,31 @@ export const DatabaseService = {
         }
 
         try {
-            // Step 1: Get History from Supabase (Background of previous scans)
+            // Step 1: Get History from Supabase
             const dbPromise = DatabaseService.fetchFromSupabase();
             
             // Step 2: Live Fetch Logic
-            // Determine which queries to run
             let queriesToRun: string[] = [];
             
             if (partial) {
-                // INCREMENTAL SCAN: Only pick the next batch
+                // INCREMENTAL SCAN: Only pick the next small batch
                 const end = Math.min(currentQueryIndex + BATCH_SIZE_BACKGROUND, TARGET_QUERIES.length);
                 queriesToRun = TARGET_QUERIES.slice(currentQueryIndex, end);
-                
-                // Update index for next time (Wrap around)
                 currentQueryIndex = end >= TARGET_QUERIES.length ? 0 : end;
             } else {
-                // FULL SCAN (Initial Load)
-                queriesToRun = TARGET_QUERIES;
+                // FULL / RANDOMIZED SCAN (Initial Load or Refresh)
+                // Pick RANDOM queries to ensure we get different tokens every time
+                queriesToRun = getRandomSubarray(TARGET_QUERIES, BATCH_SIZE_FULL);
             }
 
             // Execute Live Fetch
-            const chunks = chunkArray(queriesToRun, BATCH_SIZE_FULL);
+            const chunks = chunkArray(queriesToRun, 5); // Fetch 5 queries at a time
             let apiResults: any[] = [];
             
             for (const chunk of chunks) {
                 const chunkResults = await Promise.all(chunk.map(q => fetchWithFallbacks(q)));
                 apiResults = [...apiResults, ...chunkResults];
-                if (!partial) await new Promise(r => setTimeout(r, 50)); // Tiny delay to prevent rate limits
+                if (!partial) await new Promise(r => setTimeout(r, 20)); // Tiny delay
             }
 
             let rawPairs: DexPair[] = [];
@@ -199,22 +215,22 @@ export const DatabaseService = {
                 }
             });
 
-            // Step 3: Filter & Cleanup (LIVE DATA)
+            // Step 3: Filter & Cleanup
             const seenSymbols = new Set<string>();
             const bestPairs: DexPair[] = [];
 
-            // Sort raw pairs by liquidity first to prioritize the "real" pair
-            // This ensures we get the highest liquidity version of a token first, solving the duplicate problem
+            // Sort by liquidity to keep best version of duplicate symbols
             rawPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
 
             for (const p of rawPairs) {
                  const symbol = p.baseToken.symbol.toUpperCase();
                  
-                 // Filter logic
+                 // Deduplication
                  if (EXCLUDED_SYMBOLS.includes(symbol)) continue; 
                  if (seenSymbols.has(symbol)) continue;
-                 // Enforce image existence (Must have logo)
-                 if (!p.info?.imageUrl) continue;
+                 
+                 // Basic Requirements
+                 if (!p.info?.imageUrl) continue; // Must have logo
                  
                  seenSymbols.add(symbol);
                  bestPairs.push(p);
@@ -228,14 +244,10 @@ export const DatabaseService = {
 
                 // --- RELAXED FILTERS ---
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false; 
-                
-                // Must have trading activity
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;    
                 if (txns < REQUIREMENTS.MIN_TXNS_24H) return false;     
                 if (fdv < REQUIREMENTS.MIN_FDV) return false;           
                 
-                const validChains = ['solana', 'ethereum', 'bsc', 'base', 'arbitrum', 'avalanche', 'polygon'];
-                if (!validChains.includes(p.chainId)) return false;
                 return true;
             });
 
@@ -248,7 +260,7 @@ export const DatabaseService = {
             // 1. Fill map with DB History
             dbTokens.forEach(t => tokenMap.set(t.address, t));
             
-            // 2. Overwrite with Live Data found in this scan (Live data is fresher)
+            // 2. Overwrite with Live Data
             liveTokens.forEach(t => tokenMap.set(t.address, t));
             
             // 3. FINAL LIST
@@ -261,15 +273,14 @@ export const DatabaseService = {
                 const liqA = parseFormattedValue(a.liquidity);
                 const liqB = parseFormattedValue(b.liquidity);
                 
-                // Calculate "Hot Score"
                 const scoreA = volA + (liqA * 0.2);
                 const scoreB = volB + (liqB * 0.2);
 
                 return scoreB - scoreA;
             });
 
-            // Return up to 200 tokens to ensure the list is full
-            const finalData = sortedData.slice(0, 200);
+            // Return larger list
+            const finalData = sortedData.slice(0, 300);
 
             // Step 6: SYNC TO SUPABASE (Background)
             if (liveTokens.length > 0) {
@@ -287,7 +298,6 @@ export const DatabaseService = {
 
         } catch (error) {
             console.error("Critical: Data fetch failed.", error);
-            // Fallback to purely Supabase if API fails
             const stored = await DatabaseService.fetchFromSupabase();
             return { data: stored, source: 'SUPABASE', latency: 0 };
         }
@@ -307,17 +317,13 @@ export const DatabaseService = {
         const priceChangeH24 = pair.priceChange?.h24 || 0;
         const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 999;
         
-        // Revised Signal Logic: Not just "New", but "Active"
         if (ageHours < 72) signal = 'Volume Spike';
         else if (priceChangeH1 > 10 && totalTxns > 500) signal = 'Breakout';
         else if (buys > sells * 1.5) signal = 'Accumulation';
 
         const trend: MarketCoin['trend'] = priceChangeH24 >= 0 ? 'Bullish' : 'Bearish';
-        
-        // Risk assessment based on Liquidity depth
         const liq = pair.liquidity?.usd || 0;
         const riskLevel: MarketCoin['riskLevel'] = liq < 5000 ? 'High' : liq < 50000 ? 'Medium' : 'Low';
-        
         const smartMoneySignal: MarketCoin['smartMoneySignal'] = estimatedNetFlow > 50000 ? 'Inflow' : estimatedNetFlow < -50000 ? 'Outflow' : 'Neutral';
 
         return {
@@ -361,11 +367,11 @@ export const DatabaseService = {
                 price: t.price,
                 liquidity: t.liquidity,
                 volume_24h: t.volume24h,
-                last_seen_at: new Date(), // Updates the timestamp to keep it fresh
+                last_seen_at: new Date(), 
                 raw_data: t 
             }));
 
-            // Upsert: If token exists, update it. If not, insert it.
+            // Upsert
             const { error } = await supabase
                 .from('discovered_tokens')
                 .upsert(dbPayload, { onConflict: 'address' });
@@ -378,12 +384,12 @@ export const DatabaseService = {
 
     fetchFromSupabase: async (): Promise<MarketCoin[]> => {
         try {
-            // Increased limit to show solid history
+            // Increased limit
             const { data, error } = await supabase
                 .from('discovered_tokens')
                 .select('*')
-                .order('last_seen_at', { ascending: false }) // Get recently seen tokens
-                .limit(300);
+                .order('last_seen_at', { ascending: false }) 
+                .limit(500);
 
             if (error || !data) return [];
             return data.map((row: any) => row.raw_data as MarketCoin);
