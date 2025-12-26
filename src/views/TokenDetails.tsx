@@ -138,7 +138,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         };
 
         fetchData();
-    }, [token]); // Re-run if token changes (e.g. Navigating forward/back history)
+    }, [token]); 
 
     if (loading && !enrichedData) {
         return (

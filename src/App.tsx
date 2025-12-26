@@ -29,7 +29,7 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  // Generic data bucket to hold state for sub-views (e.g. Selected Token, Selected Wallet, Contract Address)
+  // 'viewData' holds the specific object for detail views (e.g. Selected Token, Selected Wallet)
   const [viewData, setViewData] = useState<any>(null);
 
   // --- BACKGROUND WORKER (CLIENT-SIDE BOT) ---
@@ -43,12 +43,12 @@ const App: React.FC = () => {
 
   // --- HISTORY MANAGEMENT (The "Peeling Layer" Logic) ---
   useEffect(() => {
-    // 1. Set initial history state if empty
+    // 1. Initialize history state if null
     if (!window.history.state) {
       window.history.replaceState({ view: 'overview', data: null }, '');
     }
 
-    // 2. Listen for Back/Forward buttons
+    // 2. Listen for Browser Back/Forward Buttons
     const handlePopState = (event: PopStateEvent) => {
       if (event.state) {
         setView(event.state.view);
@@ -68,13 +68,13 @@ const App: React.FC = () => {
   const navigate = (newView: ViewState, data: any = null) => {
     setView(newView);
     setViewData(data);
-    // Push a new "layer" onto the history stack
+    // Push new state to history stack so Back button works
     window.history.pushState({ view: newView, data }, '');
-    // Scroll to top on nav
+    // Scroll to top
     window.scrollTo(0, 0);
   };
 
-  // Helper to go back (triggering popstate)
+  // Unified Back Handler
   const goBack = () => {
     window.history.back();
   };
@@ -88,47 +88,37 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
-      // DASHBOARD: Clicking a token pushes 'token-details' view with token data
       case 'overview': 
         return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
       
-      // TOKEN DETAILS: 'viewData' contains the MarketCoin object
       case 'token-details': 
         return <TokenDetails token={viewData} onBack={goBack} />;
       
-      // KOL FEED
       case 'kol-feed': 
         return <KolFeed />;
       
-      // HEATMAP
       case 'heatmap': 
         return <Heatmap />;
       
-      // SENTIMENT: 'viewData' can hold a contract address string to show results immediately
       case 'sentiment': 
         return <Sentiment 
           initialContract={viewData} 
-          onAnalyze={(contract) => navigate('sentiment', contract)} 
-          onBack={goBack}
+          onAnalyze={(c) => navigate('sentiment', c)} 
+          onBack={goBack} 
         />;
       
-      // DETECTION: Search triggers 'token-detection'
       case 'detection': 
         return <Detection onSearch={(t) => navigate('token-detection', t)} />;
       
-      // TOKEN DETECTION (Specific): 'viewData' holds the token string
       case 'token-detection': 
         return <TokenDetection token={viewData} onBack={goBack} />;
       
-      // VIRALITY
       case 'virality': 
         return <Virality />;
       
-      // CHATBOT
       case 'chatbot': 
         return <Chatbot />;
       
-      // WALLET TRACKING: 'viewData' can hold a Wallet object to show profile
       case 'wallet-tracking': 
         return <WalletTracking 
           initialWallet={viewData} 
@@ -136,10 +126,9 @@ const App: React.FC = () => {
           onBack={goBack}
         />;
       
-      // SAFE SCAN: 'viewData' can hold contract string
       case 'safe-scan': 
         return <SafeScan 
-          initialContract={viewData}
+          initialContract={viewData} 
           onScan={(c) => navigate('safe-scan', c)}
           onBack={goBack}
         />;

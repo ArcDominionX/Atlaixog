@@ -302,7 +302,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 className="flex items-center gap-2 text-text-medium hover:text-text-light cursor-pointer mb-2 w-fit transition-colors font-medium text-sm"
                 onClick={onBack}
             >
-                <ArrowLeft size={18} /> Back
+                <ArrowLeft size={18} /> Back to Dashboard
             </div>
             
             <div className="bg-main border border-border rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
