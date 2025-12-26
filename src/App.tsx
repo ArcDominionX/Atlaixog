@@ -29,7 +29,7 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  // Generic state to hold data for detailed views (Token ID, Wallet Address, etc.)
+  // viewData holds the context for the view (e.g., Token Object, Wallet Address string, etc.)
   const [viewData, setViewData] = useState<any>(null);
 
   // --- BACKGROUND DATA SYNC ---
@@ -41,10 +41,10 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- ROUTER LOGIC ---
+  // --- ROUTER ENGINE ---
 
-  // 1. Parse URL to State
-  const parseUrl = () => {
+  // 1. Function to read URL and set React State
+  const syncStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
     const currentView = (params.get('view') as ViewState) || 'overview';
     const rawData = params.get('data');
@@ -52,9 +52,11 @@ const App: React.FC = () => {
     let parsedData = null;
     if (rawData) {
         try {
+            // Try to parse as JSON (for objects)
             parsedData = JSON.parse(rawData);
         } catch {
-            parsedData = rawData; // Fallback to string if not JSON
+            // If fail, treat as simple string (e.g. 'SOL', '0x123...')
+            parsedData = rawData;
         }
     }
 
@@ -62,45 +64,67 @@ const App: React.FC = () => {
     setViewData(parsedData);
   };
 
-  // 2. Listen for Back/Forward Buttons
+  // 2. Initial Load & Listen for Browser Back/Forward
   useEffect(() => {
-    parseUrl(); // Initial Load
-    window.addEventListener('popstate', parseUrl);
-    return () => window.removeEventListener('popstate', parseUrl);
+    syncStateFromUrl(); // Run once on mount
+    
+    const handlePopState = () => {
+        syncStateFromUrl(); // Run whenever history changes (Back button)
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 3. Navigation Function (Updates URL + State)
+  // 3. Navigation Action (Updates URL + State)
   const navigate = (newView: ViewState, data: any = null) => {
     const params = new URLSearchParams();
-    if (newView !== 'overview') params.set('view', newView);
     
-    // Smart Data Serialization for URL
+    // Only set 'view' param if not overview (default)
+    if (newView !== 'overview') {
+        params.set('view', newView);
+    }
+    
+    // Smart URL Serialization
     if (data) {
         if (typeof data === 'string') {
             params.set('data', data);
-        } else if (data.ticker) {
-            params.set('data', data.ticker); // Use Ticker for Tokens
-        } else if (data.addr) {
-            params.set('data', data.addr);   // Use Address for Wallets
-        } else if (data.address) {
-            params.set('data', data.address);
-        } else {
-            // Only stringify small objects if necessary, otherwise avoid huge URLs
-            // For complex objects without IDs, we might just rely on in-memory state if refreshing isn't critical for that specific transient data
+        } else if (typeof data === 'object') {
+            // Prefer short identifiers for URL cleanliness
+            if (data.ticker) params.set('data', data.ticker);
+            else if (data.addr) params.set('data', data.addr);
+            else if (data.address) params.set('data', data.address);
+            else {
+               // Fallback: If no ID found, don't put massive object in URL. 
+               // We rely on memory state for the transition, but refresh might lose detail if not backed by ID.
+            }
         }
     }
 
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    // Construct new URL
+    const queryString = params.toString();
+    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
+
+    // Push to Browser History
     window.history.pushState({}, '', newUrl);
     
+    // Update React State
     setView(newView);
     setViewData(data);
+    
+    // Reset Scroll
     window.scrollTo(0, 0);
   };
 
   // 4. Back Helper
   const goBack = () => {
-    window.history.back();
+    // Uses browser history to ensure 'Back' logic aligns with UX expectation
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        // Fallback if opened in new tab with no history
+        navigate('overview');
+    }
   };
 
   const handleLogin = () => navigate('overview');

@@ -19,18 +19,16 @@ interface WalletData {
 }
 
 interface WalletTrackingProps {
-    initialWallet?: WalletData | null;
+    initialWallet?: WalletData | string | null;
     onSelectWallet: (wallet: WalletData) => void;
     onBack: () => void;
 }
 
 export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack }) => {
-    // If initialWallet provided, show profile view. Otherwise dashboard.
-    // However, since WalletData is complex, App.tsx might pass just an address string or the object.
-    // If it's a "string" address via URL param 'data', we construct a partial object.
+    // Logic to handle both full object (from memory) and string (from URL)
     const effectiveWallet: WalletData | null = typeof initialWallet === 'string' 
         ? { id: 0, addr: initialWallet, tag: 'Unknown', bal: 'Loading...', pnl: '0%', win: '0%', tokens: 0, time: '', type: 'smart' }
-        : initialWallet || null;
+        : (initialWallet as WalletData) || null;
 
     const viewMode = effectiveWallet ? 'profile' : 'dashboard';
     
