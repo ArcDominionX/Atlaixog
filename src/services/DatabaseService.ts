@@ -9,35 +9,43 @@ const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseService
 // Using DexScreener Public API
 const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
-// --- RESEARCH & GEM REQUIREMENTS (OPTIMIZED FOR LIVE ALPHA) ---
+// --- STRATEGY 1: LIQUIDITY ANCHOR REQUIREMENTS ---
 const REQUIREMENTS = {
     MIN_LIQUIDITY_USD: 50000,    // REDUCED to $50k as requested
-    MIN_VOLUME_24H: 10000,       // Reduced from 75k to 10k to catch "Just Launched" tokens
-    MIN_TXNS_24H: 25,            // Reduced to catch early activity
-    MIN_FDV: 5000,               // Reduced to allow micro-caps
+    MIN_VOLUME_24H: 10000,       // Reduced to catch early movers
+    MIN_TXNS_24H: 25,            // Lower barrier for entry
+    MIN_FDV: 5000,               // Allow micro-caps
     MAX_AGE_HOURS_FOR_NEW: 168   // 7 Days
 };
 
 // --- EXCLUSION LIST ---
+// We exclude the anchors themselves so we only see the tokens trading AGAINST them.
 const EXCLUDED_SYMBOLS = [
+    'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 'USDe', 'FDUSD',
-    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED', 'MSOL', 'JITOSOL'
+    'RWA', 'TEST', 'DEBUG', 'WSTETH', 'CBETH', 'RETH', 'WRAPPED', 'MSOL', 'JITOSOL', 'SLERF'
 ];
 
-// --- DISCOVERY QUERIES (High Frequency) ---
+// --- CHAIN & LIQUIDITY ANCHORS ---
+// This list forces the API to scan specific chains by looking for their base money.
 const TARGET_QUERIES = [
-    // 1. Broad Ecosystems (These return the most results)
-    'SOLANA', 'ETHEREUM', 'BASE', 'BSC', 'ARBITRUM', 'AVALANCHE',
-    
-    // 2. High Volume Anchors
-    'SOL', 'WETH', 'WBNB', 'PEPE', 'WIF', 'BONK', 'PUMP',
-    
-    // 3. Trending Narratives
-    'AI', 'AGENT', 'MEME', 'CAT', 'DOG', 'TRUMP', 'ELON', 'GAMING',
-    
-    // 4. Specific Tickers
-    'BRETT', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'PNUT', 'ACT', 'LUCE',
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'MEW', 'TURBO', 'NEIRO', 'DEGEN'
+    // 1. SOLANA (Dominant Chain)
+    'SOL', 
+    'RAY',   // Raydium Pairs
+    'PUMP',  // Pump.fun Pairs
+
+    // 2. BSC (Binance Smart Chain)
+    'WBNB',  // The main pair for 99% of BSC tokens
+    'BSC',   // Text search for BSC chain
+
+    // 3. BASE & ETHEREUM (Shared Liquidity)
+    'WETH',  // Covers Ethereum AND Base (since Base uses WETH)
+    'BASE',  // Explicit text search for Base chain
+    'BRETT', // Top Base meme (often anchors other Base tokens)
+
+    // 4. Universal Stables (DeFi on all chains)
+    'USDC',
+    'USDT'
 ];
 
 // Helpers
@@ -52,14 +60,13 @@ const formatCurrency = (value: number) => {
 const formatPrice = (price: string | number) => {
     const num = typeof price === 'string' ? parseFloat(price) : price;
     if (isNaN(num)) return '$0.00';
-    if (num < 0.000001) return `$${num.toExponential(2)}`;
-    if (num < 0.01) return `$${num.toFixed(6)}`;
+    if (num < 0.0001) return `$${num.toExponential(2)}`;
+    if (num < 1.00) return `$${num.toFixed(6)}`;
     return `$${num.toFixed(2)}`;
 };
 
-const getTimeAgo = (timestamp: string | number) => {
-    const date = new Date(timestamp);
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+const getTimeAgo = (timestamp: number) => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
@@ -73,24 +80,37 @@ const getChainId = (chainId: string) => {
     return 'ethereum'; 
 };
 
-// Utility: Sleep to prevent API Rate Limits
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// API Response Types
+interface DexPair {
+    chainId: string;
+    dexId: string;
+    url: string;
+    pairAddress: string;
+    baseToken: { address: string; name: string; symbol: string; };
+    quoteToken: { symbol: string; };
+    priceUsd: string;
+    priceChange: { h1: number; h24: number; h6: number; };
+    liquidity?: { usd: number; };
+    fdv?: number;
+    volume: { h24: number; };
+    txns: { h24: { buys: number; sells: number; } };
+    pairCreatedAt?: number;
+    info?: { imageUrl?: string; };
+}
 
-// Utility: Shuffle Array
-const shuffleArray = (array: string[]) => {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-};
+// Memory Cache to prevent API spamming
+interface Cache {
+    marketData: { data: MarketCoin[]; timestamp: number; } | null;
+}
+const cache: Cache = { marketData: null };
+const CACHE_FRESH_DURATION = 15000; // 15s cache for "Live" feel
 
-// --- API FETCH HELPER ---
+// --- ROBUST FETCH STRATEGY ---
 const fetchWithFallbacks = async (query: string): Promise<any> => {
     const directUrl = `${DEXSCREENER_API_URL}?q=${query}`;
     try {
         const response = await fetch(directUrl);
-        if (!response.ok) return { pairs: [] };
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return data || { pairs: [] };
     } catch (err) {
@@ -98,187 +118,170 @@ const fetchWithFallbacks = async (query: string): Promise<any> => {
     }
 };
 
-// --- IN-MEMORY CACHE (For speed) ---
-let memoryCache: MarketCoin[] = [];
-let lastFetch = 0;
-
 export const DatabaseService = {
-    
-    // 1. MAIN FUNCTION CALLED BY DASHBOARD
-    getMarketData: async (forceRefresh: boolean = false): Promise<{ data: MarketCoin[], source: string, latency: number }> => {
+    getMarketData: async (force: boolean = false): Promise<{ data: MarketCoin[], source: 'LIVE_API' | 'CACHE', latency: number }> => {
         const start = performance.now();
-
-        // Use memory cache if fresh ( < 10 seconds )
-        if (!forceRefresh && memoryCache.length > 0 && (Date.now() - lastFetch < 10000)) {
-            return {
-                data: memoryCache,
-                source: 'MEMORY_CACHE',
-                latency: Math.round(performance.now() - start)
-            };
-        }
-
-        // Trigger immediate fetch
-        const freshData = await DatabaseService.runIngestionRobot();
         
-        return {
-            data: freshData,
-            source: 'LIVE_INGEST',
-            latency: Math.round(performance.now() - start)
-        };
-    },
-
-    // 2. BACKGROUND CHECKER
-    checkAndTriggerIngestion: async () => {
-        // Runs aggressively to keep cache populated
-        if (Date.now() - lastFetch > 15000) {
-            await DatabaseService.runIngestionRobot();
+        // Serve from cache if fresh and not forced
+        if (!force && cache.marketData) {
+            const age = Date.now() - cache.marketData.timestamp;
+            if (age < CACHE_FRESH_DURATION) {
+                return {
+                    data: cache.marketData.data,
+                    source: 'CACHE',
+                    latency: Math.round(performance.now() - start)
+                };
+            }
         }
+
+        return await DatabaseService.forceRefresh(start);
     },
 
-    // 3. THE ROBOT (Optimized for Speed)
-    runIngestionRobot: async (): Promise<MarketCoin[]> => {
+    forceRefresh: async (startTime: number = performance.now()): Promise<{ data: MarketCoin[], source: 'LIVE_API' | 'CACHE', latency: number }> => {
         try {
-            // A. Randomized Sector Scan - Increased count to fill list
-            const shuffledQueries = shuffleArray([...TARGET_QUERIES]).slice(0, 15);
-            let rawPairs: any[] = [];
+            // 1. Parallel Fetch of All Chain Anchors
+            const results = await Promise.all(
+                TARGET_QUERIES.map(q => fetchWithFallbacks(q))
+            );
 
-            // Execute in batches for speed
-            const batch1 = shuffledQueries.slice(0, 8).map(q => fetchWithFallbacks(q));
-            const results1 = await Promise.all(batch1);
-            
-            results1.forEach(r => { if(r.pairs) rawPairs.push(...r.pairs); });
-            
-            // If we don't have enough, fetch more
-            if (rawPairs.length < 50) {
-                 const batch2 = shuffledQueries.slice(8, 15).map(q => fetchWithFallbacks(q));
-                 const results2 = await Promise.all(batch2);
-                 results2.forEach(r => { if(r.pairs) rawPairs.push(...r.pairs); });
+            let rawPairs: DexPair[] = [];
+            results.forEach(result => {
+                if (result && result.pairs) {
+                    rawPairs = [...rawPairs, ...result.pairs];
+                }
+            });
+
+            if (rawPairs.length === 0) throw new Error("No pairs returned");
+
+            // 2. DEDUPLICATION
+            rawPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+            const seenSymbols = new Set<string>();
+            const bestPairs: DexPair[] = [];
+
+            for (const p of rawPairs) {
+                 const symbol = p.baseToken.symbol.toUpperCase();
+                 
+                 // Exclude anchors
+                 if (EXCLUDED_SYMBOLS.includes(symbol)) continue;
+
+                 if (seenSymbols.has(symbol)) continue;
+
+                 // Must have logo
+                 if (!p.info?.imageUrl) continue;
+
+                 seenSymbols.add(symbol);
+                 bestPairs.push(p);
             }
 
-            // B. Deduplicate & Filter
-            const seenSymbols = new Set();
-            
-            // Sort raw pairs by CREATED AT descending (Newest first) before filtering
-            rawPairs.sort((a, b) => (b.pairCreatedAt || 0) - (a.pairCreatedAt || 0));
-
-            const cleanPairs = rawPairs.filter(p => {
+            // 3. APPLY $50k FILTER & CHAIN CHECK
+            const filteredPairs = bestPairs.filter((p: DexPair) => {
                 const liq = p.liquidity?.usd || 0;
-                const vol = p.volume?.h24 || 0;
-                const symbol = p.baseToken?.symbol?.toUpperCase();
-                
-                if (EXCLUDED_SYMBOLS.includes(symbol)) return false;
+                const vol = p.volume.h24 || 0;
+                const txns = (p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0);
+
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
-                if (!p.info?.imageUrl) return false;
-
-                if (seenSymbols.has(symbol)) return false;
-                seenSymbols.add(symbol);
+                
+                // Allow major chains
+                const validChains = ['solana', 'ethereum', 'bsc', 'base'];
+                if (!validChains.includes(p.chainId)) return false;
 
                 return true;
             });
 
-            // C. Map to MarketCoin Object
-            const mappedCoins = DatabaseService.mapDbToMarketCoin(cleanPairs);
-            
-            // Update Memory Cache Immediately (Fastest UI response)
-            memoryCache = mappedCoins;
-            lastFetch = Date.now();
+            // 4. Map to UI Model
+            const processedData: MarketCoin[] = filteredPairs.map((pair, index) => {
+                const buys = pair.txns?.h24?.buys || 0;
+                const sells = pair.txns?.h24?.sells || 0;
+                const totalTxns = buys + sells;
+                
+                const flowRatio = totalTxns > 0 ? (buys / totalTxns) : 0.5;
+                const dexFlowScore = Math.round(flowRatio * 100);
+                const estimatedNetFlow = (pair.volume.h24 * (flowRatio - 0.5)); 
+                const netFlowStr = (estimatedNetFlow >= 0 ? '+' : '-') + formatCurrency(Math.abs(estimatedNetFlow));
 
-            // D. Background Save to Supabase (Don't await this to block UI)
-            if (cleanPairs.length > 0) {
-                const dbRows = cleanPairs.map(p => ({
-                    pair_address: p.pairAddress,
-                    chain: p.chainId,
-                    name: p.baseToken.name,
-                    symbol: p.baseToken.symbol,
-                    price_usd: parseFloat(p.priceUsd) || 0,
-                    liquidity_usd: p.liquidity?.usd || 0,
-                    volume_24h: p.volume?.h24 || 0,
-                    fdv: p.fdv || 0,
-                    price_change_24h: p.priceChange?.h24 || 0,
-                    buy_volume_24h: p.txns?.h24?.buys || 0,
-                    sell_volume_24h: p.txns?.h24?.sells || 0,
-                    pair_created_at: p.pairCreatedAt ? new Date(p.pairCreatedAt).toISOString() : new Date().toISOString(),
-                    logo_url: p.info?.imageUrl,
-                    dex_url: p.url,
-                    updated_at: new Date().toISOString()
-                }));
+                // Signals
+                let signal: MarketCoin['signal'] = 'None';
+                const priceChangeH1 = pair.priceChange?.h1 || 0;
+                const priceChangeH24 = pair.priceChange?.h24 || 0;
+                const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 999;
+                
+                if (ageHours < REQUIREMENTS.MAX_AGE_HOURS_FOR_NEW) signal = 'Volume Spike';
+                else if (priceChangeH1 > 15) signal = 'Breakout';
+                else if (buys > sells * 1.5) signal = 'Accumulation';
 
-                // Fire and forget
-                supabase.from('market_tokens').upsert(dbRows, { onConflict: 'pair_address' }).then(({ error }) => {
-                    if (error) console.error("DB Sync Error:", error.message);
-                });
-            }
+                const trend: MarketCoin['trend'] = priceChangeH24 >= 0 ? 'Bullish' : 'Bearish';
+                const riskLevel: MarketCoin['riskLevel'] = (pair.liquidity?.usd || 0) < 100000 ? 'High' : 'Medium';
+                const smartMoneySignal: MarketCoin['smartMoneySignal'] = estimatedNetFlow > 50000 ? 'Inflow' : estimatedNetFlow < -50000 ? 'Outflow' : 'Neutral';
+                
+                return {
+                    id: index,
+                    name: pair.baseToken.name,
+                    ticker: pair.baseToken.symbol,
+                    price: formatPrice(pair.priceUsd),
+                    h1: `${(priceChangeH1).toFixed(2)}%`,
+                    h24: `${(priceChangeH24).toFixed(2)}%`,
+                    d7: `${(pair.priceChange?.h6 || 0).toFixed(2)}%`,
+                    cap: formatCurrency(pair.fdv || pair.liquidity?.usd || 0),
+                    liquidity: formatCurrency(pair.liquidity?.usd || 0),
+                    volume24h: formatCurrency(pair.volume.h24),
+                    dexBuys: buys.toString(),
+                    dexSells: sells.toString(),
+                    dexFlow: dexFlowScore,
+                    netFlow: netFlowStr,
+                    smartMoney: smartMoneySignal === 'Inflow' ? 'Inflow' : 'Neutral',
+                    smartMoneySignal,
+                    signal,
+                    riskLevel,
+                    age: pair.pairCreatedAt ? getTimeAgo(pair.pairCreatedAt) : 'Unknown',
+                    createdTimestamp: pair.pairCreatedAt || Date.now(),
+                    img: pair.info?.imageUrl || `https://ui-avatars.com/api/?name=${pair.baseToken.name}&background=random`,
+                    trend,
+                    chain: getChainId(pair.chainId),
+                    address: pair.baseToken.address,
+                    pairAddress: pair.pairAddress
+                };
+            });
 
-            return mappedCoins;
+            // 5. Sort: Newest + High Volume
+            const sortedData = processedData.sort((a, b) => {
+                // Priority to New Tokens
+                if (a.createdTimestamp > Date.now() - (86400000 * 2)) return 1; // Prioritize < 48h
+                // Then Volume
+                const volA = parseFloat(a.volume24h.replace(/[$,KMB]/g, ''));
+                const volB = parseFloat(b.volume24h.replace(/[$,KMB]/g, ''));
+                return volB - volA;
+            });
 
-        } catch (e) {
-            console.error("Ingestion Failed", e);
-            return memoryCache; // Return stale cache if fetch fails
+            // Ensure we return up to 100 items
+            const finalData = sortedData.slice(0, 100);
+            cache.marketData = { data: finalData, timestamp: Date.now() };
+
+            return {
+                data: finalData,
+                source: 'LIVE_API',
+                latency: Math.round(performance.now() - startTime)
+            };
+
+        } catch (error) {
+            console.error("Critical: Data fetch failed.", error);
+            return { data: [], source: 'CACHE', latency: 0 };
         }
     },
 
-    // 4. MAPPER (Raw DexScreener -> UI Component)
-    mapDbToMarketCoin: (rawPairs: any[]): MarketCoin[] => {
-        return rawPairs.map((p, index) => {
-            // Check if it's from DB (snake_case) or API (camelCase)
-            const isDb = !!p.pair_created_at;
-            
-            const vol = isDb ? p.volume_24h : (p.volume?.h24 || 0);
-            const buys = isDb ? p.buy_volume_24h : (p.txns?.h24?.buys || 0);
-            const sells = isDb ? p.sell_volume_24h : (p.txns?.h24?.sells || 0);
-            const price = isDb ? p.price_usd : (parseFloat(p.priceUsd) || 0);
-            const change = isDb ? p.price_change_24h : (p.priceChange?.h24 || 0);
-            const liq = isDb ? p.liquidity_usd : (p.liquidity?.usd || 0);
-            const fdv = isDb ? p.fdv : (p.fdv || 0);
-            const created = isDb ? new Date(p.pair_created_at).getTime() : (p.pairCreatedAt || Date.now());
-            const sym = isDb ? p.symbol : p.baseToken?.symbol;
-            const name = isDb ? p.name : p.baseToken?.name;
-            const chain = isDb ? p.chain : p.chainId;
-            const addr = isDb ? p.pair_address : p.pairAddress;
-            const img = isDb ? p.logo_url : p.info?.imageUrl;
-
-            const total = buys + sells;
-            const flowScore = total > 0 ? Math.round((buys / total) * 100) : 50;
-            const netFlowVal = (vol * ((flowScore - 50) / 100));
-            const netFlowStr = (netFlowVal >= 0 ? '+' : '-') + formatCurrency(Math.abs(netFlowVal));
-            
-            return {
-                id: index,
-                name: name,
-                ticker: sym,
-                price: formatPrice(price),
-                h1: '0.00%',
-                h24: `${change?.toFixed(2)}%`,
-                d7: '0.00%',
-                cap: formatCurrency(fdv),
-                liquidity: formatCurrency(liq),
-                volume24h: formatCurrency(vol),
-                dexBuys: buys.toString(),
-                dexSells: sells.toString(),
-                dexFlow: flowScore,
-                netFlow: netFlowStr,
-                smartMoney: 'Neutral', 
-                smartMoneySignal: 'Neutral',
-                signal: change > 20 ? 'Breakout' : 'None',
-                riskLevel: liq < 100000 ? 'High' : 'Medium',
-                age: getTimeAgo(created),
-                createdTimestamp: created,
-                img: img,
-                trend: change >= 0 ? 'Bullish' : 'Bearish',
-                chain: getChainId(chain),
-                address: addr, 
-                pairAddress: addr
-            };
-        });
-    },
-
-    // 5. Token Detail Fetcher
     getTokenDetails: async (query: string): Promise<any> => {
         const result = await fetchWithFallbacks(query);
         if (result && result.pairs && result.pairs.length > 0) {
             return result.pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
         }
         return null;
+    },
+    
+    // Background Check (Called by App.tsx)
+    checkAndTriggerIngestion: async () => {
+        if (!cache.marketData || (Date.now() - cache.marketData.timestamp > CACHE_FRESH_DURATION)) {
+            await DatabaseService.forceRefresh();
+        }
     }
 };
