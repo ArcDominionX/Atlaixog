@@ -29,31 +29,58 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  const [selectedToken, setSelectedToken] = useState<string>('');
-  const [selectedTokenData, setSelectedTokenData] = useState<MarketCoin | string>('');
+  // Generic data bucket to hold state for sub-views (e.g. Selected Token, Selected Wallet, Contract Address)
+  const [viewData, setViewData] = useState<any>(null);
 
   // --- BACKGROUND WORKER (CLIENT-SIDE BOT) ---
-  // This enables "Crowdsourced" updates. When a user is online, their browser
-  // periodically scans a small slice of the market and updates the global database.
   useEffect(() => {
-    // 1. Initial background scan
     DatabaseService.checkAndTriggerIngestion();
-
-    // 2. Periodic incremental scan every 15 seconds
     const intervalId = setInterval(() => {
         DatabaseService.checkAndTriggerIngestion();
     }, 15000);
-
     return () => clearInterval(intervalId);
   }, []);
 
-  const handleLogin = () => setView('overview');
-  const handleLogout = () => setView('auth');
+  // --- HISTORY MANAGEMENT (The "Peeling Layer" Logic) ---
+  useEffect(() => {
+    // 1. Set initial history state if empty
+    if (!window.history.state) {
+      window.history.replaceState({ view: 'overview', data: null }, '');
+    }
 
-  const handleTokenSelect = (token: MarketCoin | string) => {
-      setSelectedTokenData(token);
-      setView('token-details');
+    // 2. Listen for Back/Forward buttons
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        setView(event.state.view);
+        setViewData(event.state.data);
+      } else {
+        // Fallback to overview if state is lost
+        setView('overview');
+        setViewData(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Central Navigation Function
+  const navigate = (newView: ViewState, data: any = null) => {
+    setView(newView);
+    setViewData(data);
+    // Push a new "layer" onto the history stack
+    window.history.pushState({ view: newView, data }, '');
+    // Scroll to top on nav
+    window.scrollTo(0, 0);
   };
+
+  // Helper to go back (triggering popstate)
+  const goBack = () => {
+    window.history.back();
+  };
+
+  const handleLogin = () => navigate('overview');
+  const handleLogout = () => navigate('auth');
 
   if (view === 'auth') {
     return <AuthScreen onLogin={handleLogin} />;
@@ -61,26 +88,71 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
-      case 'overview': return <Dashboard onTokenSelect={handleTokenSelect} />;
-      case 'token-details': return <TokenDetails token={selectedTokenData} onBack={() => setView('overview')} />;
-      case 'kol-feed': return <KolFeed />;
-      case 'heatmap': return <Heatmap />;
-      case 'sentiment': return <Sentiment />;
-      case 'detection': return <Detection onSearch={(t) => { setSelectedToken(t); setView('token-detection'); }} />;
-      case 'token-detection': return <TokenDetection token={selectedToken} onBack={() => setView('detection')} />;
-      case 'virality': return <Virality />;
-      case 'chatbot': return <Chatbot />;
-      case 'wallet-tracking': return <WalletTracking />;
-      case 'safe-scan': return <SafeScan />;
+      // DASHBOARD: Clicking a token pushes 'token-details' view with token data
+      case 'overview': 
+        return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
+      
+      // TOKEN DETAILS: 'viewData' contains the MarketCoin object
+      case 'token-details': 
+        return <TokenDetails token={viewData} onBack={goBack} />;
+      
+      // KOL FEED
+      case 'kol-feed': 
+        return <KolFeed />;
+      
+      // HEATMAP
+      case 'heatmap': 
+        return <Heatmap />;
+      
+      // SENTIMENT: 'viewData' can hold a contract address string to show results immediately
+      case 'sentiment': 
+        return <Sentiment 
+          initialContract={viewData} 
+          onAnalyze={(contract) => navigate('sentiment', contract)} 
+          onBack={goBack}
+        />;
+      
+      // DETECTION: Search triggers 'token-detection'
+      case 'detection': 
+        return <Detection onSearch={(t) => navigate('token-detection', t)} />;
+      
+      // TOKEN DETECTION (Specific): 'viewData' holds the token string
+      case 'token-detection': 
+        return <TokenDetection token={viewData} onBack={goBack} />;
+      
+      // VIRALITY
+      case 'virality': 
+        return <Virality />;
+      
+      // CHATBOT
+      case 'chatbot': 
+        return <Chatbot />;
+      
+      // WALLET TRACKING: 'viewData' can hold a Wallet object to show profile
+      case 'wallet-tracking': 
+        return <WalletTracking 
+          initialWallet={viewData} 
+          onSelectWallet={(w) => navigate('wallet-tracking', w)}
+          onBack={goBack}
+        />;
+      
+      // SAFE SCAN: 'viewData' can hold contract string
+      case 'safe-scan': 
+        return <SafeScan 
+          initialContract={viewData}
+          onScan={(c) => navigate('safe-scan', c)}
+          onBack={goBack}
+        />;
+      
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;
       case 'smart-money': return <EmptyView title="Smart Money Tracking" icon={<Zap size={32} />} />;
       case 'settings': return <EmptyView title="Settings" icon={<SettingsIcon size={32} />} />;
-      default: return <Dashboard onTokenSelect={handleTokenSelect} />;
+      default: return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
     }
   };
 
   return (
-    <Layout currentView={view} onViewChange={setView} onLogout={handleLogout}>
+    <Layout currentView={view} onViewChange={(v) => navigate(v)} onLogout={handleLogout}>
       {renderContent()}
     </Layout>
   );
