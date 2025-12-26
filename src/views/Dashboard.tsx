@@ -40,7 +40,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 20;
     
     // Sorting State - Default to VOLUME to show activity (Performance) rather than just Age
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'volume', direction: 'desc' });

@@ -10,13 +10,13 @@ const DEXSCREENER_SEARCH_URL = 'https://api.dexscreener.com/latest/dex/search';
 const DEXSCREENER_PAIRS_URL = 'https://api.dexscreener.com/latest/dex/pairs';
 
 // --- REQUIREMENTS ---
-// Relaxed filters to ensure rapid population
+// Relaxed filters to ensure rapid population of 100+ tokens
 const REQUIREMENTS = {
     MIN_LIQUIDITY_USD: 2000,    
     MIN_VOLUME_24H: 1000,       
     MIN_TXNS_24H: 10,            
     MIN_FDV: 5000,
-    TARGET_LIST_SIZE: 100 // The magic number: until we hit this, we ONLY search.
+    TARGET_LIST_SIZE: 150 // Increased to ensure we add 40+ more tokens
 };
 
 const EXCLUDED_SYMBOLS = [
@@ -26,7 +26,6 @@ const EXCLUDED_SYMBOLS = [
 ];
 
 // --- DISCOVERY QUERIES ---
-// Extensive list to ensure diversity
 const TARGET_QUERIES = [
     'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'TRON',
     'PEPE', 'DOGE', 'SHIB', 'FLOKI', 'BONK', 'WIF', 'MOG', 'TRUMP', 'MAGA', 'BIDEN', 
@@ -40,7 +39,7 @@ const TARGET_QUERIES = [
     'SUPER', 'ULTRA', 'MEGA', 'GIGA', 'TERA', 'HYPER', 'CYBER', 'PIXEL'
 ];
 
-// Shuffle queries once on load so every user/reload scans different sectors
+// Shuffle queries once on load
 const SHUFFLED_QUERIES = [...TARGET_QUERIES].sort(() => Math.random() - 0.5);
 let currentQueryIndex = 0;
 
@@ -179,7 +178,7 @@ export const DatabaseService = {
             
             if (currentCount < REQUIREMENTS.TARGET_LIST_SIZE) {
                 // PHASE 1: POPULATION MODE
-                // If we have fewer than 100 tokens, we DO NOT waste API calls updating prices.
+                // If we have fewer than 150 tokens, we DO NOT waste API calls updating prices.
                 // We use 100% of bandwidth to SEARCH for new tokens.
                 
                 // Run 5 distinct search queries in parallel
@@ -196,14 +195,13 @@ export const DatabaseService = {
                 
             } else {
                 // PHASE 2: MAINTENANCE MODE
-                // We have > 100 tokens. Now we prioritize freshness, but still do a little searching.
+                // We have > 150 tokens. Prioritize freshness + light discovery.
                 
-                // A. Update existing tokens (Bulk Endpoint is efficient, 30 per call)
+                // A. Update existing tokens (Bulk Endpoint is efficient)
                 const chainMap: Record<string, string[]> = {};
                 
                 // Update oldest seen tokens first (rotate through 60 at a time)
                 currentList.slice(0, 60).forEach(t => {
-                    // Map generic chain names back to DexScreener IDs
                     const cid = t.chain === 'ethereum' ? 'ethereum' : t.chain === 'solana' ? 'solana' : t.chain === 'bsc' ? 'bsc' : 'base';
                     if (!chainMap[cid]) chainMap[cid] = [];
                     if (t.pairAddress) chainMap[cid].push(t.pairAddress);
@@ -231,7 +229,7 @@ export const DatabaseService = {
             const seenSymbols = new Set<string>();
             currentList.forEach(t => seenSymbols.add(t.ticker.toUpperCase()));
 
-            // Sort new pairs by liquidity to prioritize quality
+            // Sort new pairs by liquidity
             allFetchedPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
 
             for (const p of allFetchedPairs) {
@@ -241,16 +239,11 @@ export const DatabaseService = {
                 if (EXCLUDED_SYMBOLS.includes(symbol)) continue;
                 if (!p.info?.imageUrl) continue; // Must have logo
                 
-                // Quality Floors
+                // Relaxed Quality Floors
                 const liq = p.liquidity?.usd || 0;
                 const vol = p.volume.h24 || 0;
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) continue;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) continue;
-                
-                // Logic:
-                // 1. If address exists -> Update it.
-                // 2. If address is new BUT symbol exists -> Skip (prevent duplicates).
-                // 3. If address is new AND symbol is new -> Add it.
                 
                 if (tokenMap.has(p.baseToken.address)) {
                     // Update existing
@@ -280,7 +273,7 @@ export const DatabaseService = {
             });
 
             // 5. Limit size & Sync
-            // We allow list to grow up to 300 internally in DB, but only sync top set
+            // Sync up to 300 to DB, return top set
             const finalData = mergedList.slice(0, 300);
 
             // Sync new discoveries to DB (Background)
