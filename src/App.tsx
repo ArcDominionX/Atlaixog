@@ -29,7 +29,6 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  // 'viewData' holds state for detailed views (e.g., the selected token object, wallet address, etc.)
   const [viewData, setViewData] = useState<any>(null);
 
   // --- BACKGROUND WORKER ---
@@ -41,41 +40,79 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- HISTORY API INTEGRATION ---
-  useEffect(() => {
-    // 1. Ensure we have a state object for the initial load
-    if (!window.history.state) {
-      window.history.replaceState({ view: 'overview', data: null }, '');
-    }
+  // --- ROUTER: SYNC STATE FROM URL ---
+  const syncStateFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    const currentViewParam = params.get('view') as ViewState;
+    const dataParam = params.get('data');
 
-    // 2. Listen for Back/Forward buttons
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state) {
-        setView(event.state.view);
-        setViewData(event.state.data);
+    if (currentViewParam) {
+      setView(currentViewParam);
+      // Try to parse data if it looks like JSON, otherwise use as string
+      if (dataParam) {
+        try {
+            setViewData(JSON.parse(dataParam));
+        } catch {
+            setViewData(dataParam);
+        }
       } else {
-        // Fallback if history state is missing
-        setView('overview');
         setViewData(null);
       }
+    } else {
+      setView('overview');
+      setViewData(null);
+    }
+  };
+
+  // --- INITIAL LOAD & POPSTATE LISTENER ---
+  useEffect(() => {
+    // 1. Initial Load
+    syncStateFromUrl();
+
+    // 2. Listen for Browser Back/Forward
+    const handlePopState = () => {
+      syncStateFromUrl();
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Central Navigation Function
-  // Usage: navigate('token-details', selectedTokenObject)
+  // --- NAVIGATION HANDLER ---
   const navigate = (newView: ViewState, data: any = null) => {
+    // 1. Update React State
     setView(newView);
     setViewData(data);
-    // Push new state to browser history
-    window.history.pushState({ view: newView, data }, '');
-    // Scroll to top on navigation
+
+    // 2. Update URL & History
+    const params = new URLSearchParams();
+    params.set('view', newView);
+    
+    if (data) {
+        // If data is an object (like MarketCoin), we prefer to store just the ID/Ticker in URL for cleanliness
+        // But for this SPA to work seamlessly with complex objects without re-fetching, 
+        // we will store the string identifier if possible, or stringify small objects.
+        if (typeof data === 'string') {
+            params.set('data', data);
+        } else if (data.ticker) {
+            params.set('data', data.ticker); // Prefer Ticker for cleaner URLs
+        } else if (data.addr) {
+            params.set('data', data.addr);   // Prefer Address for wallets
+        } else {
+            // Fallback: don't put complex huge objects in URL, just handle state in memory if needed
+            // But for deep linking to work, we usually need an ID. 
+            // We'll skip adding 'data' to URL if it's too complex and rely on state, 
+            // BUT this breaks refresh. So we try to use ID strings where possible in child components.
+        }
+    }
+
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({ view: newView, data }, '', newUrl);
+    
+    // 3. Scroll to top
     window.scrollTo(0, 0);
   };
 
-  // Helper to go back (native browser behavior)
   const goBack = () => {
     window.history.back();
   };
@@ -89,55 +126,43 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
-      // DASHBOARD: Clicking a token navigates to details
       case 'overview': 
         return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
       
-      // TOKEN DETAILS: Receives token data from viewData
       case 'token-details': 
         return <TokenDetails token={viewData} onBack={goBack} />;
       
-      case 'kol-feed': 
-        return <KolFeed />;
+      case 'kol-feed': return <KolFeed />;
+      case 'heatmap': return <Heatmap />;
       
-      case 'heatmap': 
-        return <Heatmap />;
-      
-      // SENTIMENT: Supports drill-down if viewData is provided
       case 'sentiment': 
         return <Sentiment 
           initialContract={viewData} 
-          onAnalyze={(contract) => navigate('sentiment', contract)} 
+          onAnalyze={(c) => navigate('sentiment', c)} 
           onBack={goBack} 
         />;
       
-      // DETECTION: Search triggers specific token detection view
       case 'detection': 
         return <Detection onSearch={(t) => navigate('token-detection', t)} />;
       
       case 'token-detection': 
         return <TokenDetection token={viewData} onBack={goBack} />;
       
-      case 'virality': 
-        return <Virality />;
+      case 'virality': return <Virality />;
+      case 'chatbot': return <Chatbot />;
       
-      case 'chatbot': 
-        return <Chatbot />;
-      
-      // WALLET TRACKING: Supports drilling down into a specific wallet profile
       case 'wallet-tracking': 
         return <WalletTracking 
           initialWallet={viewData} 
-          onSelectWallet={(w) => navigate('wallet-tracking', w)} 
+          onSelectWallet={(w) => navigate('wallet-tracking', w)}
           onBack={goBack}
         />;
       
-      // SAFE SCAN: Supports drill-down result
       case 'safe-scan': 
         return <SafeScan 
           initialContract={viewData} 
-          onScan={(c) => navigate('safe-scan', c)} 
-          onBack={goBack} 
+          onScan={(c) => navigate('safe-scan', c)}
+          onBack={goBack}
         />;
       
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;

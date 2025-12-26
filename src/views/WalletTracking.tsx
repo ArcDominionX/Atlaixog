@@ -25,10 +25,16 @@ interface WalletTrackingProps {
 }
 
 export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack }) => {
-    // Determine view mode based on presence of initialWallet (passed from history state)
-    const viewMode = initialWallet ? 'profile' : 'dashboard';
+    // If initialWallet provided, show profile view. Otherwise dashboard.
+    // However, since WalletData is complex, App.tsx might pass just an address string or the object.
+    // If it's a "string" address via URL param 'data', we construct a partial object.
+    const effectiveWallet: WalletData | null = typeof initialWallet === 'string' 
+        ? { id: 0, addr: initialWallet, tag: 'Unknown', bal: 'Loading...', pnl: '0%', win: '0%', tokens: 0, time: '', type: 'smart' }
+        : initialWallet || null;
+
+    const viewMode = effectiveWallet ? 'profile' : 'dashboard';
     
-    // Local state for dashboard filters
+    // Local state for dashboard
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [walletType, setWalletType] = useState('Smart Money');
     const [chain, setChain] = useState('All Chains');
@@ -79,7 +85,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
         };
     };
 
-    // Close filters on click outside or scroll
+    // Close filters
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (activeFilter) {
@@ -89,28 +95,25 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 }
             }
         };
-
         const handleScroll = () => {
             if (activeFilter) setActiveFilter(null);
         };
-
         document.addEventListener('mousedown', handleClickOutside);
         window.addEventListener('scroll', handleScroll, true);
-        
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
             window.removeEventListener('scroll', handleScroll, true);
         };
     }, [activeFilter]);
 
-    // FETCH DATA USING ROUTER WHEN ENTERING PROFILE OR CHANGING CHAIN
+    // FETCH DATA
     useEffect(() => {
         const fetchData = async () => {
-            if (viewMode === 'profile' && initialWallet) {
+            if (viewMode === 'profile' && effectiveWallet) {
                 setLoading(true);
                 try {
                     const targetChain = chain === 'All Chains' ? 'Ethereum' : chain;
-                    const data = await ChainRouter.fetchPortfolio(targetChain, initialWallet.addr);
+                    const data = await ChainRouter.fetchPortfolio(targetChain, effectiveWallet.addr);
                     setPortfolioData(data);
                 } catch (e) {
                     console.error("Failed to fetch wallet data", e);
@@ -119,11 +122,10 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 }
             }
         };
-
         fetchData();
-    }, [viewMode, initialWallet, chain]); 
+    }, [viewMode, effectiveWallet, chain]); 
 
-    // Chart Effect for Profile View
+    // Chart Effect
     useEffect(() => {
         if (viewMode === 'profile' && netWorthChartRef.current && typeof ApexCharts !== 'undefined' && !loading) {
             const options = {
@@ -131,37 +133,13 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                     name: 'Net Worth',
                     data: [4.2, 4.3, 4.1, 4.8, 5.2, 5.0, 5.5, 6.2, 5.8, 7.1, 8.2]
                 }],
-                chart: {
-                    type: 'area',
-                    height: 280,
-                    background: 'transparent',
-                    toolbar: { show: false },
-                    zoom: { enabled: false }
-                },
+                chart: { type: 'area', height: 280, background: 'transparent', toolbar: { show: false }, zoom: { enabled: false } },
                 colors: ['#26D356'],
-                fill: {
-                    type: 'gradient',
-                    gradient: {
-                        shadeIntensity: 1,
-                        opacityFrom: 0.4,
-                        opacityTo: 0.05,
-                        stops: [0, 100]
-                    }
-                },
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
                 stroke: { curve: 'smooth', width: 2 },
                 dataLabels: { enabled: false },
-                xaxis: {
-                    categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
-                    labels: { style: { colors: '#8F96A3', fontFamily: 'Inter', fontSize: '11px' } },
-                    axisBorder: { show: false },
-                    axisTicks: { show: false }
-                },
-                yaxis: {
-                    labels: {
-                        style: { colors: '#8F96A3', fontFamily: 'Inter', fontSize: '11px' },
-                        formatter: (val: number) => `$${val}M`
-                    }
-                },
+                xaxis: { categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'], labels: { style: { colors: '#8F96A3', fontFamily: 'Inter', fontSize: '11px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+                yaxis: { labels: { style: { colors: '#8F96A3', fontFamily: 'Inter', fontSize: '11px' }, formatter: (val: number) => `$${val}M` } },
                 grid: { borderColor: '#2A2E33', strokeDashArray: 4 },
                 theme: { mode: 'dark' },
                 tooltip: { theme: 'dark' }
@@ -336,19 +314,19 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 <>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                         <div className="flex items-center gap-4">
-                            <div className="text-xl md:text-3xl font-bold font-mono truncate max-w-[200px] md:max-w-none">{initialWallet?.addr}</div>
+                            <div className="text-xl md:text-3xl font-bold font-mono truncate max-w-[200px] md:max-w-none">{effectiveWallet?.addr}</div>
                             <span className={`text-xs px-3 py-1 rounded font-bold uppercase ${
-                                initialWallet?.type === 'whale' ? 'bg-[#2F80ED]/10 text-[#2F80ED] border border-[#2F80ED]/30' : 
-                                initialWallet?.type === 'smart' ? 'bg-primary-green/10 text-primary-green border border-primary-green/30' : 
+                                effectiveWallet?.type === 'whale' ? 'bg-[#2F80ED]/10 text-[#2F80ED] border border-[#2F80ED]/30' : 
+                                effectiveWallet?.type === 'smart' ? 'bg-primary-green/10 text-primary-green border border-primary-green/30' : 
                                 'bg-primary-red/10 text-primary-red border border-primary-red/30'
-                            }`}>{initialWallet?.tag}</span>
+                            }`}>{effectiveWallet?.tag}</span>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-card border border-border rounded-xl p-5 text-center">
                             <h5 className="text-text-medium text-[10px] font-bold uppercase tracking-wide mb-1">Total Net Worth</h5>
-                            <p className="text-text-light font-bold text-lg">{portfolioData?.netWorth || initialWallet?.bal}</p>
+                            <p className="text-text-light font-bold text-lg">{portfolioData?.netWorth || effectiveWallet?.bal}</p>
                         </div>
                         <div className="bg-card border border-border rounded-xl p-5 text-center">
                             <h5 className="text-text-medium text-[10px] font-bold uppercase tracking-wide mb-1">Active Assets</h5>
