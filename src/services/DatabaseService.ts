@@ -6,57 +6,65 @@ import { APP_CONFIG } from '../config';
 // --- INITIALIZE SUPABASE ---
 const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey);
 
-// Using DexScreener Public API
-const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
+const DEXSCREENER_SEARCH_URL = 'https://api.dexscreener.com/latest/dex/search';
+const DEXSCREENER_PAIRS_URL = 'https://api.dexscreener.com/latest/dex/pairs';
 
-// --- RELAXED REQUIREMENTS FOR RAPID POPULATION ---
+// --- REQUIREMENTS ---
 const REQUIREMENTS = {
-    // Keep low to fill list
     MIN_LIQUIDITY_USD: 2000,    
     MIN_VOLUME_24H: 1000,       
     MIN_TXNS_24H: 10,            
-    MIN_FDV: 5000
+    MIN_FDV: 5000,
+    TARGET_LIST_SIZE: 120 // Aim for slightly more than 100 to account for filters
 };
 
-// --- EXCLUSION LIST ---
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 
     'USDE', 'FDUSD', 'WRAPPED', 'MSOL', 'JITOSOL', 'SLERF'
 ];
 
-// --- EXPANDED DISCOVERY QUERIES ---
+// --- DISCOVERY QUERIES ---
 const TARGET_QUERIES = [
-    // 1. Chains & Majors
     'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'TRON',
-    
-    // 2. Common Tickers & Memes
     'PEPE', 'DOGE', 'SHIB', 'FLOKI', 'BONK', 'WIF', 'MOG', 'TRUMP', 'MAGA', 'BIDEN', 
     'ELON', 'MOON', 'SAFE', 'CAT', 'DOG', 'INU', 'APE', 'KONG', 'FROG', 'TOAD',
-    
-    // 3. Concepts & Tech
     'AI', 'GPT', 'BOT', 'AGENT', 'TECH', 'DATA', 'COMPUTE', 'CLOUD', 'DEPIN', 'RWA',
     'GAMING', 'GAME', 'PLAY', 'WIN', 'BET', 'CASINO', 'LUCK', 'HIGH', 'LOW',
-    
-    // 4. DeFi Terms
     'SWAP', 'DEX', 'FINANCE', 'PROTOCOL', 'YIELD', 'FARM', 'STAKE', 'DAO', 'LEND', 'BORROW',
     'GOLD', 'SILVER', 'PUMP', 'DUMP', 'SHORT', 'LONG', 'BULL', 'BEAR',
-    
-    // 5. Random Common Syllables (To find fresh random tickers)
     'NEO', 'MATRIX', 'META', 'VERSE', 'WORLD', 'STAR', 'GALAXY', 'SPACE', 'MARS',
     'RED', 'BLUE', 'GREEN', 'BLACK', 'WHITE', 'ORANGE', 'PURPLE',
-    'SUPER', 'ULTRA', 'MEGA', 'GIGA', 'TERA', 'HYPER', 'CYBER', 'PIXEL',
-    'BOY', 'GIRL', 'MAN', 'WOMAN', 'KING', 'QUEEN', 'PRINCE', 'LORD'
+    'SUPER', 'ULTRA', 'MEGA', 'GIGA', 'TERA', 'HYPER', 'CYBER', 'PIXEL'
 ];
 
-// --- SMART ROTATION STATE ---
-// We shuffle the queries once on load, then cycle through them sequentially.
-// This ensures we cover ALL topics and don't just randomly pick "SOL" 10 times.
-let currentQueryIndex = 0;
+// Shuffle queries once
 const SHUFFLED_QUERIES = [...TARGET_QUERIES].sort(() => Math.random() - 0.5);
+let currentQueryIndex = 0;
 
-// Reduced batch size to prevent Rate Limiting (429 Errors)
-const BATCH_SIZE = 5; 
+// API Response Types
+interface DexPair {
+    chainId: string;
+    dexId: string;
+    url: string;
+    pairAddress: string;
+    baseToken: { address: string; name: string; symbol: string; };
+    quoteToken: { symbol: string; };
+    priceUsd: string;
+    priceChange: { h1: number; h24: number; h6: number; };
+    liquidity?: { usd: number; };
+    fdv?: number;
+    volume: { h24: number; };
+    txns: { h24: { buys: number; sells: number; } };
+    pairCreatedAt?: number;
+    info?: { imageUrl?: string; };
+}
+
+interface Cache {
+    marketData: { data: MarketCoin[]; timestamp: number; } | null;
+}
+const cache: Cache = { marketData: null };
+const CACHE_FRESH_DURATION = 60000; 
 
 // Helpers
 const formatCurrency = (value: number) => {
@@ -100,67 +108,51 @@ const getChainId = (chainId: string) => {
     return 'ethereum'; 
 };
 
-// API Response Types
-interface DexPair {
-    chainId: string;
-    dexId: string;
-    url: string;
-    pairAddress: string;
-    baseToken: { address: string; name: string; symbol: string; };
-    quoteToken: { symbol: string; };
-    priceUsd: string;
-    priceChange: { h1: number; h24: number; h6: number; };
-    liquidity?: { usd: number; };
-    fdv?: number;
-    volume: { h24: number; };
-    txns: { h24: { buys: number; sells: number; } };
-    pairCreatedAt?: number;
-    info?: { imageUrl?: string; };
-}
+// --- API METHODS ---
 
-interface Cache {
-    marketData: { data: MarketCoin[]; timestamp: number; } | null;
-}
-const cache: Cache = { marketData: null };
-
-// INCREASED CACHE DURATION TO 60 SECONDS
-// This frees up API rate limits so we can focus on DISCOVERY instead of updating existing prices constantly.
-const CACHE_FRESH_DURATION = 60000; 
-
-// --- ROBUST FETCH STRATEGY ---
-const fetchWithFallbacks = async (query: string): Promise<any> => {
-    const directUrl = `${DEXSCREENER_API_URL}?q=${query}`;
+const searchDexScreener = async (query: string): Promise<DexPair[]> => {
     try {
-        const response = await fetch(directUrl);
-        // If we hit a rate limit, return empty but don't crash
-        if (response.status === 429) {
-            console.warn("Rate limit hit, skipping query:", query);
-            return { pairs: [] };
-        }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch(`${DEXSCREENER_SEARCH_URL}?q=${query}`);
+        if (response.status === 429) return []; // Skip if rate limited
+        if (!response.ok) return [];
         const data = await response.json();
-        return data || { pairs: [] };
-    } catch (err) {
-        return { pairs: [] };
+        return data.pairs || [];
+    } catch (e) {
+        return [];
     }
 };
 
-const chunkArray = (arr: string[], size: number) => {
-    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
-        arr.slice(i * size, i * size + size)
-    );
+const updatePairsBulk = async (chainId: string, pairAddresses: string[]): Promise<DexPair[]> => {
+    try {
+        // DexScreener supports up to 30 pairs per request
+        const chunks = [];
+        for (let i = 0; i < pairAddresses.length; i += 30) {
+            chunks.push(pairAddresses.slice(i, i + 30));
+        }
+
+        const results = await Promise.all(chunks.map(async chunk => {
+            const url = `${DEXSCREENER_PAIRS_URL}/${chainId}/${chunk.join(',')}`;
+            const res = await fetch(url);
+            if (!res.ok) return { pairs: [] };
+            return res.json();
+        }));
+
+        let allPairs: DexPair[] = [];
+        results.forEach((r: any) => {
+            if (r && r.pairs) allPairs = [...allPairs, ...r.pairs];
+        });
+        return allPairs;
+    } catch (e) {
+        return [];
+    }
 };
 
+
 export const DatabaseService = {
-    /**
-     * Main data fetching function.
-     * @param force - Ignore cache and fetch live
-     * @param partial - If true, only scan a subset of queries (Background Mode)
-     */
-    getMarketData: async (force: boolean = false, partial: boolean = false): Promise<{ data: MarketCoin[], source: 'LIVE_API' | 'CACHE' | 'SUPABASE', latency: number }> => {
+    getMarketData: async (force: boolean = false, partial: boolean = false): Promise<{ data: MarketCoin[], source: string, latency: number }> => {
         const start = performance.now();
         
-        // Return cached data if valid and we aren't forcing a refresh
+        // Cache Check
         if (!force && !partial && cache.marketData) {
             const age = Date.now() - cache.marketData.timestamp;
             if (age < CACHE_FRESH_DURATION) {
@@ -173,82 +165,103 @@ export const DatabaseService = {
         }
 
         try {
-            // Step 1: Get History from Supabase
-            const dbPromise = DatabaseService.fetchFromSupabase();
-            
-            // Step 2: Live Fetch Logic (Discovery)
-            let queriesToRun: string[] = [];
-            
-            // Always run in small batches now to prevent 429 errors
-            // We cycle through SHUFFLED_QUERIES sequentially.
-            const end = Math.min(currentQueryIndex + BATCH_SIZE, SHUFFLED_QUERIES.length);
-            queriesToRun = SHUFFLED_QUERIES.slice(currentQueryIndex, end);
-            
-            // Increment index, wrap around if needed
-            currentQueryIndex = end >= SHUFFLED_QUERIES.length ? 0 : end;
+            // 1. Load existing data from DB (Our "Memory")
+            const dbTokens = await DatabaseService.fetchFromSupabase();
+            let currentList = [...dbTokens];
+            const currentCount = currentList.length;
 
-            // Execute Live Fetch
-            const chunkResults = await Promise.all(queriesToRun.map(q => fetchWithFallbacks(q)));
+            let newPairs: DexPair[] = [];
+            let updatedPairs: DexPair[] = [];
+
+            // --- STRATEGY: POPULATION VS MAINTENANCE ---
             
-            let rawPairs: DexPair[] = [];
-            chunkResults.forEach(result => {
-                if (result && result.pairs) {
-                    rawPairs = [...rawPairs, ...result.pairs];
-                }
-            });
+            if (currentCount < REQUIREMENTS.TARGET_LIST_SIZE) {
+                // PHASE 1: POPULATION (Prioritize Search)
+                // We use all API bandwidth to find NEW tokens. 
+                // We DO NOT waste calls updating existing ones yet.
+                
+                // Run 5 search queries in parallel
+                const batchSize = 5;
+                const end = Math.min(currentQueryIndex + batchSize, SHUFFLED_QUERIES.length);
+                const queries = SHUFFLED_QUERIES.slice(currentQueryIndex, end);
+                currentQueryIndex = end >= SHUFFLED_QUERIES.length ? 0 : end;
 
-            // Step 3: Filter & Cleanup
-            const seenSymbols = new Set<string>();
-            const bestPairs: DexPair[] = [];
+                const searchResults = await Promise.all(queries.map(q => searchDexScreener(q)));
+                searchResults.forEach(pairs => newPairs = [...newPairs, ...pairs]);
+                
+            } else {
+                // PHASE 2: MAINTENANCE (Update + Light Discovery)
+                // We have enough tokens. Now we keep them fresh efficiently.
+                
+                // A. Update existing tokens (Bulk Endpoint is VERY efficient)
+                // Group by chain for the endpoint
+                const chainMap: Record<string, string[]> = {};
+                // Update oldest seen tokens first (simple rotation)
+                currentList.slice(0, 60).forEach(t => {
+                    // Map generic chain names back to DexScreener IDs if needed
+                    const cid = t.chain === 'ethereum' ? 'ethereum' : t.chain === 'solana' ? 'solana' : t.chain === 'bsc' ? 'bsc' : 'base';
+                    if (!chainMap[cid]) chainMap[cid] = [];
+                    if (t.pairAddress) chainMap[cid].push(t.pairAddress);
+                });
 
-            // Sort by liquidity to keep best version of duplicate symbols
-            rawPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+                const updatePromises = Object.entries(chainMap).map(([chainId, addrs]) => updatePairsBulk(chainId, addrs));
+                const updateResults = await Promise.all(updatePromises);
+                updateResults.forEach(pairs => updatedPairs = [...updatedPairs, ...pairs]);
 
-            for (const p of rawPairs) {
-                 const symbol = p.baseToken.symbol.toUpperCase();
-                 
-                 if (EXCLUDED_SYMBOLS.includes(symbol)) continue; 
-                 if (seenSymbols.has(symbol)) continue;
-                 
-                 // Basic Requirements
-                 if (!p.info?.imageUrl) continue; // Must have logo
-                 
-                 seenSymbols.add(symbol);
-                 bestPairs.push(p);
+                // B. Light Discovery (Run 1 search just to find gems)
+                const query = SHUFFLED_QUERIES[currentQueryIndex];
+                currentQueryIndex = (currentQueryIndex + 1) % SHUFFLED_QUERIES.length;
+                const searchRes = await searchDexScreener(query);
+                newPairs = searchRes;
             }
 
-            const liveFilteredPairs = bestPairs.filter((p: DexPair) => {
-                const liq = p.liquidity?.usd || 0;
-                const vol = p.volume.h24 || 0;
-                const fdv = p.fdv || 0;
-                const txns = (p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0);
-
-                // --- RELAXED FILTERS ---
-                if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false; 
-                if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;    
-                if (txns < REQUIREMENTS.MIN_TXNS_24H) return false;     
-                if (fdv < REQUIREMENTS.MIN_FDV) return false;           
-                
-                return true;
-            });
-
-            const liveTokens: MarketCoin[] = liveFilteredPairs.map(p => DatabaseService.transformPair(p));
-
-            // Step 4: MERGE Logic
-            const dbTokens = await dbPromise;
+            // 2. Process & Merge Data
+            const allFetchedPairs = [...newPairs, ...updatedPairs];
             const tokenMap = new Map<string, MarketCoin>();
             
-            // 1. Fill map with DB History
-            dbTokens.forEach(t => tokenMap.set(t.address, t));
-            
-            // 2. Overwrite with Live Data
-            liveTokens.forEach(t => tokenMap.set(t.address, t));
-            
-            // 3. FINAL LIST
-            const mergedList = Array.from(tokenMap.values());
+            // Fill map with existing DB data first
+            currentList.forEach(t => tokenMap.set(t.address, t));
 
-            // Step 5: Sorting Strategy ("Hot Score")
-            const sortedData = mergedList.sort((a, b) => {
+            // Process fetched pairs
+            const seenSymbols = new Set<string>();
+            // Add existing symbols to seen set so we don't re-add duplicates
+            currentList.forEach(t => seenSymbols.add(t.ticker.toUpperCase()));
+
+            // Sort new pairs by liquidity to prioritize quality
+            allFetchedPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+
+            for (const p of allFetchedPairs) {
+                const symbol = p.baseToken.symbol.toUpperCase();
+                
+                // Strict Filtering
+                if (EXCLUDED_SYMBOLS.includes(symbol)) continue;
+                if (!p.info?.imageUrl) continue; // Must have logo
+                
+                // Quality Floors
+                const liq = p.liquidity?.usd || 0;
+                const vol = p.volume.h24 || 0;
+                if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) continue;
+                if (vol < REQUIREMENTS.MIN_VOLUME_24H) continue;
+                
+                // If we already have this address in DB, update it (it's an Update)
+                // If it's a new address but symbol exists, ignore (Duplicate Symbol Prevention)
+                if (tokenMap.has(p.baseToken.address)) {
+                    // Update existing
+                    tokenMap.set(p.baseToken.address, DatabaseService.transformPair(p));
+                } else {
+                    // New discovery
+                    if (!seenSymbols.has(symbol)) {
+                         seenSymbols.add(symbol);
+                         tokenMap.set(p.baseToken.address, DatabaseService.transformPair(p));
+                    }
+                }
+            }
+
+            // 3. Convert back to array
+            let mergedList = Array.from(tokenMap.values());
+
+            // 4. Sorting Strategy ("Hot Score")
+            mergedList.sort((a, b) => {
                 const volA = parseFormattedValue(a.volume24h);
                 const volB = parseFormattedValue(b.volume24h);
                 const liqA = parseFormattedValue(a.liquidity);
@@ -256,31 +269,30 @@ export const DatabaseService = {
                 
                 const scoreA = volA + (liqA * 0.2);
                 const scoreB = volB + (liqB * 0.2);
-
                 return scoreB - scoreA;
             });
 
-            // Return larger list
-            const finalData = sortedData.slice(0, 300);
+            // 5. Limit size & Sync
+            // We allow list to grow up to 300 internally, but only sync/return top set
+            const finalData = mergedList.slice(0, 300);
 
-            // Step 6: SYNC TO SUPABASE (Background)
-            if (liveTokens.length > 0) {
-                DatabaseService.syncToSupabase(liveTokens).catch(err => console.warn("Background Sync Error:", err));
+            // Sync new discoveries to DB
+            if (newPairs.length > 0 || updatedPairs.length > 0) {
+                DatabaseService.syncToSupabase(finalData).catch(err => console.warn("Sync skipped", err));
             }
 
-            // Update Cache
             cache.marketData = { data: finalData, timestamp: Date.now() };
 
             return {
                 data: finalData,
-                source: liveTokens.length > 0 ? 'LIVE_API' : 'SUPABASE',
+                source: newPairs.length > 0 ? 'LIVE_SEARCH' : 'LIVE_UPDATE',
                 latency: Math.round(performance.now() - start)
             };
 
         } catch (error) {
-            console.error("Critical: Data fetch failed.", error);
+            console.error("Critical Fetch Error:", error);
             const stored = await DatabaseService.fetchFromSupabase();
-            return { data: stored, source: 'SUPABASE', latency: 0 };
+            return { data: stored, source: 'SUPABASE_FALLBACK', latency: 0 };
         }
     },
 
@@ -339,7 +351,6 @@ export const DatabaseService = {
     syncToSupabase: async (tokens: MarketCoin[]) => {
         try {
             if (!tokens.length) return;
-            // Map to DB schema
             const dbPayload = tokens.map(t => ({
                 address: t.address, 
                 ticker: t.ticker,
@@ -352,7 +363,7 @@ export const DatabaseService = {
                 raw_data: t 
             }));
 
-            // Upsert
+            // Upsert in batches to be safe
             const { error } = await supabase
                 .from('discovered_tokens')
                 .upsert(dbPayload, { onConflict: 'address' });
@@ -365,12 +376,11 @@ export const DatabaseService = {
 
     fetchFromSupabase: async (): Promise<MarketCoin[]> => {
         try {
-            // Limit increased to ensure we get a full list
             const { data, error } = await supabase
                 .from('discovered_tokens')
                 .select('*')
                 .order('last_seen_at', { ascending: false }) 
-                .limit(500);
+                .limit(400);
 
             if (error || !data) return [];
             return data.map((row: any) => row.raw_data as MarketCoin);
@@ -380,15 +390,14 @@ export const DatabaseService = {
     },
 
     getTokenDetails: async (query: string): Promise<any> => {
-        const result = await fetchWithFallbacks(query);
-        if (result && result.pairs && result.pairs.length > 0) {
-            return result.pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        const result = await searchDexScreener(query);
+        if (result && result.length > 0) {
+            return result.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
         }
         return null;
     },
     
     checkAndTriggerIngestion: async () => {
-        // Trigger background fetch, which now uses the sequential index logic
         await DatabaseService.getMarketData(true, true);
     }
 };
