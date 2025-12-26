@@ -10,12 +10,13 @@ const DEXSCREENER_SEARCH_URL = 'https://api.dexscreener.com/latest/dex/search';
 const DEXSCREENER_PAIRS_URL = 'https://api.dexscreener.com/latest/dex/pairs';
 
 // --- REQUIREMENTS ---
+// Relaxed filters to ensure rapid population
 const REQUIREMENTS = {
     MIN_LIQUIDITY_USD: 2000,    
     MIN_VOLUME_24H: 1000,       
     MIN_TXNS_24H: 10,            
     MIN_FDV: 5000,
-    TARGET_LIST_SIZE: 120 // Aim for slightly more than 100 to account for filters
+    TARGET_LIST_SIZE: 100 // The magic number: until we hit this, we ONLY search.
 };
 
 const EXCLUDED_SYMBOLS = [
@@ -25,6 +26,7 @@ const EXCLUDED_SYMBOLS = [
 ];
 
 // --- DISCOVERY QUERIES ---
+// Extensive list to ensure diversity
 const TARGET_QUERIES = [
     'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'TRON',
     'PEPE', 'DOGE', 'SHIB', 'FLOKI', 'BONK', 'WIF', 'MOG', 'TRUMP', 'MAGA', 'BIDEN', 
@@ -38,7 +40,7 @@ const TARGET_QUERIES = [
     'SUPER', 'ULTRA', 'MEGA', 'GIGA', 'TERA', 'HYPER', 'CYBER', 'PIXEL'
 ];
 
-// Shuffle queries once
+// Shuffle queries once on load so every user/reload scans different sectors
 const SHUFFLED_QUERIES = [...TARGET_QUERIES].sort(() => Math.random() - 0.5);
 let currentQueryIndex = 0;
 
@@ -173,32 +175,35 @@ export const DatabaseService = {
             let newPairs: DexPair[] = [];
             let updatedPairs: DexPair[] = [];
 
-            // --- STRATEGY: POPULATION VS MAINTENANCE ---
+            // --- CRITICAL LOGIC: POPULATION VS MAINTENANCE ---
             
             if (currentCount < REQUIREMENTS.TARGET_LIST_SIZE) {
-                // PHASE 1: POPULATION (Prioritize Search)
-                // We use all API bandwidth to find NEW tokens. 
-                // We DO NOT waste calls updating existing ones yet.
+                // PHASE 1: POPULATION MODE
+                // If we have fewer than 100 tokens, we DO NOT waste API calls updating prices.
+                // We use 100% of bandwidth to SEARCH for new tokens.
                 
-                // Run 5 search queries in parallel
+                // Run 5 distinct search queries in parallel
                 const batchSize = 5;
                 const end = Math.min(currentQueryIndex + batchSize, SHUFFLED_QUERIES.length);
                 const queries = SHUFFLED_QUERIES.slice(currentQueryIndex, end);
+                
+                // Advance index loop
                 currentQueryIndex = end >= SHUFFLED_QUERIES.length ? 0 : end;
 
+                // Parallel Fetch
                 const searchResults = await Promise.all(queries.map(q => searchDexScreener(q)));
                 searchResults.forEach(pairs => newPairs = [...newPairs, ...pairs]);
                 
             } else {
-                // PHASE 2: MAINTENANCE (Update + Light Discovery)
-                // We have enough tokens. Now we keep them fresh efficiently.
+                // PHASE 2: MAINTENANCE MODE
+                // We have > 100 tokens. Now we prioritize freshness, but still do a little searching.
                 
-                // A. Update existing tokens (Bulk Endpoint is VERY efficient)
-                // Group by chain for the endpoint
+                // A. Update existing tokens (Bulk Endpoint is efficient, 30 per call)
                 const chainMap: Record<string, string[]> = {};
-                // Update oldest seen tokens first (simple rotation)
+                
+                // Update oldest seen tokens first (rotate through 60 at a time)
                 currentList.slice(0, 60).forEach(t => {
-                    // Map generic chain names back to DexScreener IDs if needed
+                    // Map generic chain names back to DexScreener IDs
                     const cid = t.chain === 'ethereum' ? 'ethereum' : t.chain === 'solana' ? 'solana' : t.chain === 'bsc' ? 'bsc' : 'base';
                     if (!chainMap[cid]) chainMap[cid] = [];
                     if (t.pairAddress) chainMap[cid].push(t.pairAddress);
@@ -208,7 +213,7 @@ export const DatabaseService = {
                 const updateResults = await Promise.all(updatePromises);
                 updateResults.forEach(pairs => updatedPairs = [...updatedPairs, ...pairs]);
 
-                // B. Light Discovery (Run 1 search just to find gems)
+                // B. Light Discovery (Run 1 single search just to find gems occasionally)
                 const query = SHUFFLED_QUERIES[currentQueryIndex];
                 currentQueryIndex = (currentQueryIndex + 1) % SHUFFLED_QUERIES.length;
                 const searchRes = await searchDexScreener(query);
@@ -224,7 +229,6 @@ export const DatabaseService = {
 
             // Process fetched pairs
             const seenSymbols = new Set<string>();
-            // Add existing symbols to seen set so we don't re-add duplicates
             currentList.forEach(t => seenSymbols.add(t.ticker.toUpperCase()));
 
             // Sort new pairs by liquidity to prioritize quality
@@ -243,8 +247,11 @@ export const DatabaseService = {
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) continue;
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) continue;
                 
-                // If we already have this address in DB, update it (it's an Update)
-                // If it's a new address but symbol exists, ignore (Duplicate Symbol Prevention)
+                // Logic:
+                // 1. If address exists -> Update it.
+                // 2. If address is new BUT symbol exists -> Skip (prevent duplicates).
+                // 3. If address is new AND symbol is new -> Add it.
+                
                 if (tokenMap.has(p.baseToken.address)) {
                     // Update existing
                     tokenMap.set(p.baseToken.address, DatabaseService.transformPair(p));
@@ -273,10 +280,10 @@ export const DatabaseService = {
             });
 
             // 5. Limit size & Sync
-            // We allow list to grow up to 300 internally, but only sync/return top set
+            // We allow list to grow up to 300 internally in DB, but only sync top set
             const finalData = mergedList.slice(0, 300);
 
-            // Sync new discoveries to DB
+            // Sync new discoveries to DB (Background)
             if (newPairs.length > 0 || updatedPairs.length > 0) {
                 DatabaseService.syncToSupabase(finalData).catch(err => console.warn("Sync skipped", err));
             }
