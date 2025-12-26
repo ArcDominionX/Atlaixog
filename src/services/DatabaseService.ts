@@ -9,21 +9,19 @@ const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey
 // Using DexScreener Public API
 const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
-// --- SOLID PROJECT REQUIREMENTS ---
+// --- RELAXED REQUIREMENTS FOR RAPID POPULATION ---
 const REQUIREMENTS = {
-    // QUALITY FILTER: Strict $50k Liquidity floor.
-    // This removes 99% of "pump.fun" rugs and dead coins.
-    MIN_LIQUIDITY_USD: 50000,    
+    // Lowered liquidity floor to fill list fast
+    MIN_LIQUIDITY_USD: 2000,    
     
-    // ACTIVE MARKET: Must have significant volume ($25k+)
-    // This ensures we only show tokens people are actually trading.
-    MIN_VOLUME_24H: 25000,       
+    // Basic activity check
+    MIN_VOLUME_24H: 1000,       
     
-    // REAL COMMUNITY: Must have at least 50 distinct trades
-    MIN_TXNS_24H: 50,            
+    // Minimal transaction count
+    MIN_TXNS_24H: 10,            
     
-    // VALUATION FLOOR: No micro-caps (<$100k FDV)
-    MIN_FDV: 100000
+    // Minimal valuation
+    MIN_FDV: 5000
 };
 
 // --- EXCLUSION LIST ---
@@ -54,7 +52,7 @@ const TARGET_QUERIES = [
 // --- SMART ROTATION STATE ---
 let currentQueryIndex = 0;
 const BATCH_SIZE_BACKGROUND = 4; // Requests per background tick
-const BATCH_SIZE_FULL = 8; // Increased concurrent requests for deeper search
+const BATCH_SIZE_FULL = 10; // Increased concurrent requests to fill list faster
 
 // Helpers
 const formatCurrency = (value: number) => {
@@ -166,7 +164,6 @@ export const DatabaseService = {
 
         try {
             // Step 1: Get History from Supabase (Background of previous scans)
-            // This ensures "Tokens passed the test are saved... so another random person... will see"
             const dbPromise = DatabaseService.fetchFromSupabase();
             
             // Step 2: Live Fetch Logic
@@ -207,6 +204,7 @@ export const DatabaseService = {
             const bestPairs: DexPair[] = [];
 
             // Sort raw pairs by liquidity first to prioritize the "real" pair
+            // This ensures we get the highest liquidity version of a token first, solving the duplicate problem
             rawPairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
 
             for (const p of rawPairs) {
@@ -215,7 +213,7 @@ export const DatabaseService = {
                  // Filter logic
                  if (EXCLUDED_SYMBOLS.includes(symbol)) continue; 
                  if (seenSymbols.has(symbol)) continue;
-                 // Enforce image existence (basic quality check)
+                 // Enforce image existence (Must have logo)
                  if (!p.info?.imageUrl) continue;
                  
                  seenSymbols.add(symbol);
@@ -228,11 +226,10 @@ export const DatabaseService = {
                 const fdv = p.fdv || 0;
                 const txns = (p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0);
 
-                // --- SOLID PROJECT FILTERS ---
-                // "Filter the low quality tokens out... at least $50k liquidity"
+                // --- RELAXED FILTERS ---
                 if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false; 
                 
-                // "Performing well and there are a lot of activity"
+                // Must have trading activity
                 if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;    
                 if (txns < REQUIREMENTS.MIN_TXNS_24H) return false;     
                 if (fdv < REQUIREMENTS.MIN_FDV) return false;           
@@ -254,17 +251,10 @@ export const DatabaseService = {
             // 2. Overwrite with Live Data found in this scan (Live data is fresher)
             liveTokens.forEach(t => tokenMap.set(t.address, t));
             
-            // 3. FINAL QUALITY CHECK ON MERGED LIST
-            // This ensures that if older, lower quality tokens exist in the DB from previous runs, they are hidden.
-            const mergedList = Array.from(tokenMap.values()).filter(t => {
-                const liq = parseFormattedValue(t.liquidity);
-                // Re-apply liquidity filter on the final list
-                return liq >= REQUIREMENTS.MIN_LIQUIDITY_USD;
-            });
+            // 3. FINAL LIST
+            const mergedList = Array.from(tokenMap.values());
 
             // Step 5: Sorting Strategy ("Hot Score")
-            // We removed the forced "Newest First" logic.
-            // Now, older tokens with massive activity will float to the top.
             const sortedData = mergedList.sort((a, b) => {
                 const volA = parseFormattedValue(a.volume24h);
                 const volB = parseFormattedValue(b.volume24h);
@@ -272,17 +262,16 @@ export const DatabaseService = {
                 const liqB = parseFormattedValue(b.liquidity);
                 
                 // Calculate "Hot Score"
-                // Heavily weight volume (Activity)
                 const scoreA = volA + (liqA * 0.2);
                 const scoreB = volB + (liqB * 0.2);
 
                 return scoreB - scoreA;
             });
 
-            const finalData = sortedData.slice(0, 150);
+            // Return up to 200 tokens to ensure the list is full
+            const finalData = sortedData.slice(0, 200);
 
             // Step 6: SYNC TO SUPABASE (Background)
-            // "Tokens which passed the test is also saved on the data base"
             if (liveTokens.length > 0) {
                 DatabaseService.syncToSupabase(liveTokens).catch(err => console.warn("Background Sync Error:", err));
             }
@@ -300,9 +289,7 @@ export const DatabaseService = {
             console.error("Critical: Data fetch failed.", error);
             // Fallback to purely Supabase if API fails
             const stored = await DatabaseService.fetchFromSupabase();
-            // Filter stored data too in case of failure
-            const cleanStored = stored.filter(t => parseFormattedValue(t.liquidity) >= REQUIREMENTS.MIN_LIQUIDITY_USD);
-            return { data: cleanStored, source: 'SUPABASE', latency: 0 };
+            return { data: stored, source: 'SUPABASE', latency: 0 };
         }
     },
 
@@ -329,7 +316,7 @@ export const DatabaseService = {
         
         // Risk assessment based on Liquidity depth
         const liq = pair.liquidity?.usd || 0;
-        const riskLevel: MarketCoin['riskLevel'] = liq < 100000 ? 'High' : liq < 500000 ? 'Medium' : 'Low';
+        const riskLevel: MarketCoin['riskLevel'] = liq < 5000 ? 'High' : liq < 50000 ? 'Medium' : 'Low';
         
         const smartMoneySignal: MarketCoin['smartMoneySignal'] = estimatedNetFlow > 50000 ? 'Inflow' : estimatedNetFlow < -50000 ? 'Outflow' : 'Neutral';
 
