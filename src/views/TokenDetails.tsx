@@ -24,9 +24,12 @@ interface EnrichedTokenData {
     url: string;
 }
 
+// SIMULATION HELPER: Fallback if Moralis Data is empty or fails
 const generateActivity = (volume24h: number, price: number, ticker: string) => {
     const activities = [];
     const walletTypes = ['Smart Money', 'Whale', 'Bot', 'Fresh Wallet'];
+    
+    // Safety check for price to avoid division by zero
     const safePrice = price > 0 ? price : 0.00000001;
 
     for (let i = 0; i < 8; i++) {
@@ -48,9 +51,12 @@ const generateActivity = (volume24h: number, price: number, ticker: string) => {
             tag: walletTypes[Math.floor(Math.random() * walletTypes.length)]
         });
     }
+
+    // Sort by time (newest/lowest timeAgo first)
     return activities.sort((a, b) => parseInt(a.time) - parseInt(b.time));
 };
 
+// Helper to map chains for Chart Provider (DexScreener)
 const getChartUrl = (chainId: string, pairAddress: string) => {
     return `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&theme=dark&trades=0&info=0`;
 };
@@ -59,10 +65,12 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
     const [copied, setCopied] = useState(false);
     const [enrichedData, setEnrichedData] = useState<EnrichedTokenData | null>(null);
     const [loading, setLoading] = useState(true);
+    
+    // Unified State for Activity (Real or Simulated)
     const [activityFeed, setActivityFeed] = useState<RealActivity[]>([]);
     const [isRealData, setIsRealData] = useState(false);
 
-    // Handle string inputs (from URL) vs Object inputs (from State)
+    // If token passed is a string, use it. If object, take ticker.
     const initialTicker = typeof token === 'string' ? token : token?.ticker || 'Token';
 
     const handleCopy = () => {
@@ -73,23 +81,26 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
         }
     };
 
+    // FETCH DATA
     useEffect(() => {
         const fetchData = async () => {
             if (!token) return;
             setLoading(true);
             
             // Prioritize Pair Address (most accurate), then Token Address, then Ticker
-            // If token is just a string (from URL param), treat it as search query
+            // If token comes from URL params (as string), we treat it as a general search query
             const query = typeof token === 'string' 
                 ? token 
                 : token.pairAddress || token.address || token.ticker;
             
             try {
+                // 1. Get Market Data (DexScreener)
                 const data = await DatabaseService.getTokenDetails(query);
                 
                 if (data) {
                     setEnrichedData(data);
                     
+                    // 2. Fetch Real On-Chain Data (Moralis)
                     const price = parseFloat(data.priceUsd) || 0;
                     const realActivity = await MoralisService.getTokenActivity(
                         data.baseToken.address, 
@@ -102,6 +113,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         setActivityFeed(realActivity);
                         setIsRealData(true);
                     } else {
+                        // 3. Fallback to Simulation
                         const vol = data.volume?.h24 || 100000;
                         const sim = generateActivity(vol, price, data.baseToken.symbol);
                         const mappedSim: RealActivity[] = sim.map(s => ({
@@ -134,7 +146,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
             <div className="flex flex-col items-center justify-center min-h-[60vh]">
                  <RefreshCw className="animate-spin text-primary-green mb-4" size={40} />
                  <div className="text-xl font-bold">Scanning Chain Data...</div>
-                 <div className="text-sm text-text-medium mt-2">Fetching details for: {initialTicker}</div>
+                 <div className="text-sm text-text-medium mt-2">Loading details for {initialTicker}</div>
             </div>
         );
     }
@@ -151,12 +163,15 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
 
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
+            {/* 1. Header Navigation */}
             <button onClick={onBack} className="flex items-center gap-2 text-text-medium hover:text-text-light w-fit transition-colors font-medium">
                 <ArrowLeft size={18} /> Back
             </button>
 
+            {/* 2. Top Section */}
             <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-6">
                 <div className="flex flex-col lg:flex-row justify-between gap-6">
+                    {/* Left: Identity */}
                     <div className="flex gap-4 md:gap-5">
                         <img src={imageUrl} className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-border shadow-lg" onError={(e) => e.currentTarget.src='https://via.placeholder.com/64'} />
                         <div className="flex flex-col justify-center">
@@ -188,6 +203,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                         </div>
                     </div>
 
+                    {/* Right: Price, Stats & Performance */}
                     <div className="flex flex-col items-start lg:items-end justify-center w-full lg:w-auto gap-4">
                         <div className="flex items-baseline gap-3">
                             <div className="text-3xl md:text-4xl font-extrabold text-text-light tracking-tight">{currentPrice}</div>
@@ -213,7 +229,10 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                 </div>
             </div>
 
+            {/* 3. Main Content - CHART ONLY */}
             <div className="flex flex-col gap-6">
+                
+                {/* DEXSCREENER EMBED CHART (Live Data) */}
                 <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col h-[600px] relative">
                     <iframe 
                         src={getChartUrl(enrichedData?.chainId || 'ethereum', enrichedData?.pairAddress || '')}
@@ -224,7 +243,9 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                     ></iframe>
                 </div>
 
+                {/* Container for Activity & Wallets */}
                 <div className="flex flex-col xl:flex-row gap-6 w-full">
+                    {/* On-Chain Activity Feed (Powered by Moralis) */}
                     <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
                         <div className="flex justify-between items-center mb-5">
                              <div className="flex items-center gap-2">
@@ -235,6 +256,7 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                              <span className="text-xs bg-card-hover px-2 py-1 rounded text-text-medium border border-border">Live Feed</span>
                         </div>
                         
+                        {/* Feed Content */}
                         <div className="flex flex-col flex-grow">
                             {activityFeed.slice(0, 8).map((item, i) => (
                                 <div key={i} className={`flex items-center justify-between py-4 border-b border-border/50 last:border-0 hover:bg-card-hover/20 transition-colors`}>
@@ -251,8 +273,12 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ token, onBack }) => 
                                 </div>
                             ))}
                         </div>
+                        <button className="w-full mt-4 py-2.5 text-xs font-bold text-text-medium border border-dashed border-border rounded-lg hover:text-text-light hover:border-text-light hover:bg-card-hover transition-all uppercase tracking-wide">
+                            Load More Events
+                        </button>
                     </div>
 
+                    {/* Wallet Interactions Table */}
                     <div className="flex-1 min-w-0 bg-card border border-border rounded-xl p-6 h-full flex flex-col">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-bold text-text-light">Wallet Interactions</h3>

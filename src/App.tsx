@@ -29,9 +29,10 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
+  // Generic state to hold data for detailed views (Token ID, Wallet Address, etc.)
   const [viewData, setViewData] = useState<any>(null);
 
-  // --- BACKGROUND WORKER ---
+  // --- BACKGROUND DATA SYNC ---
   useEffect(() => {
     DatabaseService.checkAndTriggerIngestion();
     const intervalId = setInterval(() => {
@@ -40,79 +41,64 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- ROUTER: SYNC STATE FROM URL ---
-  const syncStateFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
-    const currentViewParam = params.get('view') as ViewState;
-    const dataParam = params.get('data');
+  // --- ROUTER LOGIC ---
 
-    if (currentViewParam) {
-      setView(currentViewParam);
-      // Try to parse data if it looks like JSON, otherwise use as string
-      if (dataParam) {
+  // 1. Parse URL to State
+  const parseUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    const currentView = (params.get('view') as ViewState) || 'overview';
+    const rawData = params.get('data');
+    
+    let parsedData = null;
+    if (rawData) {
         try {
-            setViewData(JSON.parse(dataParam));
+            parsedData = JSON.parse(rawData);
         } catch {
-            setViewData(dataParam);
+            parsedData = rawData; // Fallback to string if not JSON
         }
-      } else {
-        setViewData(null);
-      }
-    } else {
-      setView('overview');
-      setViewData(null);
     }
+
+    setView(currentView);
+    setViewData(parsedData);
   };
 
-  // --- INITIAL LOAD & POPSTATE LISTENER ---
+  // 2. Listen for Back/Forward Buttons
   useEffect(() => {
-    // 1. Initial Load
-    syncStateFromUrl();
-
-    // 2. Listen for Browser Back/Forward
-    const handlePopState = () => {
-      syncStateFromUrl();
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    parseUrl(); // Initial Load
+    window.addEventListener('popstate', parseUrl);
+    return () => window.removeEventListener('popstate', parseUrl);
   }, []);
 
-  // --- NAVIGATION HANDLER ---
+  // 3. Navigation Function (Updates URL + State)
   const navigate = (newView: ViewState, data: any = null) => {
-    // 1. Update React State
-    setView(newView);
-    setViewData(data);
-
-    // 2. Update URL & History
     const params = new URLSearchParams();
-    params.set('view', newView);
+    if (newView !== 'overview') params.set('view', newView);
     
+    // Smart Data Serialization for URL
     if (data) {
-        // If data is an object (like MarketCoin), we prefer to store just the ID/Ticker in URL for cleanliness
-        // But for this SPA to work seamlessly with complex objects without re-fetching, 
-        // we will store the string identifier if possible, or stringify small objects.
         if (typeof data === 'string') {
             params.set('data', data);
         } else if (data.ticker) {
-            params.set('data', data.ticker); // Prefer Ticker for cleaner URLs
+            params.set('data', data.ticker); // Use Ticker for Tokens
         } else if (data.addr) {
-            params.set('data', data.addr);   // Prefer Address for wallets
+            params.set('data', data.addr);   // Use Address for Wallets
+        } else if (data.address) {
+            params.set('data', data.address);
         } else {
-            // Fallback: don't put complex huge objects in URL, just handle state in memory if needed
-            // But for deep linking to work, we usually need an ID. 
-            // We'll skip adding 'data' to URL if it's too complex and rely on state, 
-            // BUT this breaks refresh. So we try to use ID strings where possible in child components.
+            // Only stringify small objects if necessary, otherwise avoid huge URLs
+            // For complex objects without IDs, we might just rely on in-memory state if refreshing isn't critical for that specific transient data
         }
     }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.pushState({ view: newView, data }, '', newUrl);
+    window.history.pushState({}, '', newUrl);
     
-    // 3. Scroll to top
+    setView(newView);
+    setViewData(data);
     window.scrollTo(0, 0);
   };
 
+  // 4. Back Helper
   const goBack = () => {
     window.history.back();
   };
@@ -137,9 +123,9 @@ const App: React.FC = () => {
       
       case 'sentiment': 
         return <Sentiment 
-          initialContract={viewData} 
-          onAnalyze={(c) => navigate('sentiment', c)} 
-          onBack={goBack} 
+            initialContract={viewData} 
+            onAnalyze={(c) => navigate('sentiment', c)} 
+            onBack={goBack} 
         />;
       
       case 'detection': 
@@ -153,16 +139,16 @@ const App: React.FC = () => {
       
       case 'wallet-tracking': 
         return <WalletTracking 
-          initialWallet={viewData} 
-          onSelectWallet={(w) => navigate('wallet-tracking', w)}
-          onBack={goBack}
+            initialWallet={viewData} 
+            onSelectWallet={(w) => navigate('wallet-tracking', w)} 
+            onBack={goBack}
         />;
       
       case 'safe-scan': 
         return <SafeScan 
-          initialContract={viewData} 
-          onScan={(c) => navigate('safe-scan', c)}
-          onBack={goBack}
+            initialContract={viewData} 
+            onScan={(c) => navigate('safe-scan', c)} 
+            onBack={goBack}
         />;
       
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;
