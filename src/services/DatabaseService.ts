@@ -9,19 +9,25 @@ const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey
 // Using DexScreener Public API
 const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
-// --- RESEARCH & GEM REQUIREMENTS ---
+// --- SOLID PROJECT REQUIREMENTS ---
 const REQUIREMENTS = {
-    // LOWERED THRESHOLD: Real "Alpha" often starts at $10k-$15k liquidity (e.g. Pump.fun migrations)
-    MIN_LIQUIDITY_USD: 10000,    
-    // LOWERED THRESHOLD: Ensure we catch early movers
-    MIN_VOLUME_24H: 5000,       
-    MIN_TXNS_24H: 10,            
-    MIN_FDV: 2000,               
-    MAX_AGE_HOURS_FOR_NEW: 48    
+    // QUALITY FILTER: Strict $50k Liquidity floor.
+    // This removes 99% of "pump.fun" rugs and dead coins.
+    MIN_LIQUIDITY_USD: 50000,    
+    
+    // ACTIVE MARKET: Must have significant volume ($25k+)
+    // This ensures we only show tokens people are actually trading.
+    MIN_VOLUME_24H: 25000,       
+    
+    // REAL COMMUNITY: Must have at least 50 distinct trades
+    MIN_TXNS_24H: 50,            
+    
+    // VALUATION FLOOR: No micro-caps (<$100k FDV)
+    MIN_FDV: 100000
 };
 
 // --- EXCLUSION LIST ---
-// We filter these out as "Primary" tokens, but we look for tokens TRADING AGAINST them.
+// We filter these out as "Primary" tokens to focus on the projects trading against them.
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 
@@ -29,22 +35,26 @@ const EXCLUDED_SYMBOLS = [
 ];
 
 // --- DISCOVERY QUERIES ---
-// Expanded list to cast a wider net for new pairs.
-// DexScreener search is fuzzy, so generic terms help find new pairs.
+// Focusing on high-quality narratives and ecosystems.
 const TARGET_QUERIES = [
-    // Ecosystems
-    'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON',
-    // Trending Tickers (Finds pairs sharing the name)
-    'PUMP', 'RAY', 'WIF', 'BONK', 'PEPE', 'MOG', 'POPCAT', 'GOAT', 'MOODENG', 'ACT', 'PNUT',
-    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO',
-    // Generic Alpha Terms (Finds "Baby...", "Super...", "AI...")
-    'AI', 'AGENT', 'MEME', 'CAT', 'DOG', 'INU', 'ELON', 'PEPE', 'BETA', 'SAFE', 'MOON', 'DAO', 'GAMING', 'DEPIN'
+    // 1. Major Ecosystems (Broad Search)
+    'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM',
+    
+    // 2. High-Quality DeFi & Infra Sectors
+    'AI', 'AGENT', 'DEPIN', 'RWA', 'GAMING', 'LAYER2', 'COMPUTE', 'DATA', 'ZK', 'DAO',
+    
+    // 3. Leading Assets (Finding pairs trading against them)
+    'USDC', 'USDT', 'PENDLE', 'ONDO', 'RENDER', 'JUP', 'RAY',
+    
+    // 4. Established/Trending Anchors (High volume leaders)
+    'WIF', 'BONK', 'PEPE', 'POPCAT', 'GOAT', 'MOODENG', 'ACT', 'PNUT',
+    'VIRTUAL', 'SPX', 'GIGA', 'FWOG', 'TRUMP', 'MELANIA', 'TURBO', 'NEIRO'
 ];
 
 // --- SMART ROTATION STATE ---
 let currentQueryIndex = 0;
 const BATCH_SIZE_BACKGROUND = 4; // Requests per background tick
-const BATCH_SIZE_FULL = 6; // Concurrent requests for full refresh
+const BATCH_SIZE_FULL = 8; // Increased concurrent requests for deeper search
 
 // Helpers
 const formatCurrency = (value: number) => {
@@ -61,6 +71,17 @@ const formatPrice = (price: string | number) => {
     if (num < 0.0001) return `$${num.toExponential(2)}`;
     if (num < 1.00) return `$${num.toFixed(6)}`;
     return `$${num.toFixed(2)}`;
+};
+
+// Helper to parse formatted currency back to number for filtering
+const parseFormattedValue = (val: string): number => {
+    if (!val) return 0;
+    const clean = val.replace(/[$,]/g, '');
+    let multiplier = 1;
+    if (clean.includes('B')) multiplier = 1e9;
+    else if (clean.includes('M')) multiplier = 1e6;
+    else if (clean.includes('K')) multiplier = 1e3;
+    return parseFloat(clean) * multiplier;
 };
 
 const getTimeAgo = (timestamp: number) => {
@@ -145,6 +166,7 @@ export const DatabaseService = {
 
         try {
             // Step 1: Get History from Supabase (Background of previous scans)
+            // This ensures "Tokens passed the test are saved... so another random person... will see"
             const dbPromise = DatabaseService.fetchFromSupabase();
             
             // Step 2: Live Fetch Logic
@@ -180,7 +202,7 @@ export const DatabaseService = {
                 }
             });
 
-            // Step 3: Filter & Cleanup
+            // Step 3: Filter & Cleanup (LIVE DATA)
             const seenSymbols = new Set<string>();
             const bestPairs: DexPair[] = [];
 
@@ -193,8 +215,8 @@ export const DatabaseService = {
                  // Filter logic
                  if (EXCLUDED_SYMBOLS.includes(symbol)) continue; 
                  if (seenSymbols.has(symbol)) continue;
-                 // Note: Removed Strict Image Check. Some brand new alpha doesn't have a logo yet.
-                 // if (!p.info?.imageUrl) continue;
+                 // Enforce image existence (basic quality check)
+                 if (!p.info?.imageUrl) continue;
                  
                  seenSymbols.add(symbol);
                  bestPairs.push(p);
@@ -203,11 +225,19 @@ export const DatabaseService = {
             const liveFilteredPairs = bestPairs.filter((p: DexPair) => {
                 const liq = p.liquidity?.usd || 0;
                 const vol = p.volume.h24 || 0;
-                // Relaxed Filters
-                if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false;
-                if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;
+                const fdv = p.fdv || 0;
+                const txns = (p.txns?.h24?.buys || 0) + (p.txns?.h24?.sells || 0);
+
+                // --- SOLID PROJECT FILTERS ---
+                // "Filter the low quality tokens out... at least $50k liquidity"
+                if (liq < REQUIREMENTS.MIN_LIQUIDITY_USD) return false; 
                 
-                const validChains = ['solana', 'ethereum', 'bsc', 'base'];
+                // "Performing well and there are a lot of activity"
+                if (vol < REQUIREMENTS.MIN_VOLUME_24H) return false;    
+                if (txns < REQUIREMENTS.MIN_TXNS_24H) return false;     
+                if (fdv < REQUIREMENTS.MIN_FDV) return false;           
+                
+                const validChains = ['solana', 'ethereum', 'bsc', 'base', 'arbitrum', 'avalanche', 'polygon'];
                 if (!validChains.includes(p.chainId)) return false;
                 return true;
             });
@@ -224,28 +254,35 @@ export const DatabaseService = {
             // 2. Overwrite with Live Data found in this scan (Live data is fresher)
             liveTokens.forEach(t => tokenMap.set(t.address, t));
             
-            const mergedList = Array.from(tokenMap.values());
+            // 3. FINAL QUALITY CHECK ON MERGED LIST
+            // This ensures that if older, lower quality tokens exist in the DB from previous runs, they are hidden.
+            const mergedList = Array.from(tokenMap.values()).filter(t => {
+                const liq = parseFormattedValue(t.liquidity);
+                // Re-apply liquidity filter on the final list
+                return liq >= REQUIREMENTS.MIN_LIQUIDITY_USD;
+            });
 
-            // Step 5: Sorting Strategy
-            // We want NEW tokens, but also HIGH VOLUME tokens. 
+            // Step 5: Sorting Strategy ("Hot Score")
+            // We removed the forced "Newest First" logic.
+            // Now, older tokens with massive activity will float to the top.
             const sortedData = mergedList.sort((a, b) => {
-                // If created in last 24h, give massive boost
-                const now = Date.now();
-                const isNewA = (now - a.createdTimestamp) < 86400000;
-                const isNewB = (now - b.createdTimestamp) < 86400000;
+                const volA = parseFormattedValue(a.volume24h);
+                const volB = parseFormattedValue(b.volume24h);
+                const liqA = parseFormattedValue(a.liquidity);
+                const liqB = parseFormattedValue(b.liquidity);
+                
+                // Calculate "Hot Score"
+                // Heavily weight volume (Activity)
+                const scoreA = volA + (liqA * 0.2);
+                const scoreB = volB + (liqB * 0.2);
 
-                if (isNewA && !isNewB) return -1;
-                if (!isNewA && isNewB) return 1;
-
-                // Otherwise sort by Volume
-                const volA = parseFloat(a.volume24h.replace(/[$,KMB]/g, '')) * (a.volume24h.includes('M') ? 1000000 : a.volume24h.includes('K') ? 1000 : 1);
-                const volB = parseFloat(b.volume24h.replace(/[$,KMB]/g, '')) * (b.volume24h.includes('M') ? 1000000 : b.volume24h.includes('K') ? 1000 : 1);
-                return volB - volA;
+                return scoreB - scoreA;
             });
 
             const finalData = sortedData.slice(0, 150);
 
             // Step 6: SYNC TO SUPABASE (Background)
+            // "Tokens which passed the test is also saved on the data base"
             if (liveTokens.length > 0) {
                 DatabaseService.syncToSupabase(liveTokens).catch(err => console.warn("Background Sync Error:", err));
             }
@@ -263,7 +300,9 @@ export const DatabaseService = {
             console.error("Critical: Data fetch failed.", error);
             // Fallback to purely Supabase if API fails
             const stored = await DatabaseService.fetchFromSupabase();
-            return { data: stored, source: 'SUPABASE', latency: 0 };
+            // Filter stored data too in case of failure
+            const cleanStored = stored.filter(t => parseFormattedValue(t.liquidity) >= REQUIREMENTS.MIN_LIQUIDITY_USD);
+            return { data: cleanStored, source: 'SUPABASE', latency: 0 };
         }
     },
 
@@ -281,13 +320,18 @@ export const DatabaseService = {
         const priceChangeH24 = pair.priceChange?.h24 || 0;
         const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 999;
         
-        if (ageHours < REQUIREMENTS.MAX_AGE_HOURS_FOR_NEW) signal = 'Volume Spike';
-        else if (priceChangeH1 > 15) signal = 'Breakout';
+        // Revised Signal Logic: Not just "New", but "Active"
+        if (ageHours < 72) signal = 'Volume Spike';
+        else if (priceChangeH1 > 10 && totalTxns > 500) signal = 'Breakout';
         else if (buys > sells * 1.5) signal = 'Accumulation';
 
         const trend: MarketCoin['trend'] = priceChangeH24 >= 0 ? 'Bullish' : 'Bearish';
-        const riskLevel: MarketCoin['riskLevel'] = (pair.liquidity?.usd || 0) < 50000 ? 'High' : 'Medium';
-        const smartMoneySignal: MarketCoin['smartMoneySignal'] = estimatedNetFlow > 25000 ? 'Inflow' : estimatedNetFlow < -25000 ? 'Outflow' : 'Neutral';
+        
+        // Risk assessment based on Liquidity depth
+        const liq = pair.liquidity?.usd || 0;
+        const riskLevel: MarketCoin['riskLevel'] = liq < 100000 ? 'High' : liq < 500000 ? 'Medium' : 'Low';
+        
+        const smartMoneySignal: MarketCoin['smartMoneySignal'] = estimatedNetFlow > 50000 ? 'Inflow' : estimatedNetFlow < -50000 ? 'Outflow' : 'Neutral';
 
         return {
             id: index,
@@ -310,7 +354,6 @@ export const DatabaseService = {
             riskLevel,
             age: pair.pairCreatedAt ? getTimeAgo(pair.pairCreatedAt) : 'Unknown',
             createdTimestamp: pair.pairCreatedAt || Date.now(),
-            // Fallback image if missing
             img: pair.info?.imageUrl || `https://ui-avatars.com/api/?name=${pair.baseToken.symbol}&background=random&color=fff`,
             trend,
             chain: getChainId(pair.chainId),
@@ -322,6 +365,7 @@ export const DatabaseService = {
     syncToSupabase: async (tokens: MarketCoin[]) => {
         try {
             if (!tokens.length) return;
+            // Map to DB schema
             const dbPayload = tokens.map(t => ({
                 address: t.address, 
                 ticker: t.ticker,
@@ -330,10 +374,11 @@ export const DatabaseService = {
                 price: t.price,
                 liquidity: t.liquidity,
                 volume_24h: t.volume24h,
-                last_seen_at: new Date(), // Updates the timestamp
+                last_seen_at: new Date(), // Updates the timestamp to keep it fresh
                 raw_data: t 
             }));
 
+            // Upsert: If token exists, update it. If not, insert it.
             const { error } = await supabase
                 .from('discovered_tokens')
                 .upsert(dbPayload, { onConflict: 'address' });
@@ -346,11 +391,11 @@ export const DatabaseService = {
 
     fetchFromSupabase: async (): Promise<MarketCoin[]> => {
         try {
-            // Increased limit to 300 to show more history if API is quiet
+            // Increased limit to show solid history
             const { data, error } = await supabase
                 .from('discovered_tokens')
                 .select('*')
-                .order('last_seen_at', { ascending: false })
+                .order('last_seen_at', { ascending: false }) // Get recently seen tokens
                 .limit(300);
 
             if (error || !data) return [];

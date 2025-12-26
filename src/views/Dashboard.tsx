@@ -42,8 +42,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
-    // Sorting State - Default to NEWEST (Age) to show fresh tokens first, fall back to Volume
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdTimestamp', direction: 'desc' });
+    // Sorting State - Default to VOLUME to show activity (Performance) rather than just Age
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'volume', direction: 'desc' });
 
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
