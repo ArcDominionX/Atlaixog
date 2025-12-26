@@ -29,10 +29,10 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  // 'viewData' holds the specific object for detail views (e.g. Selected Token, Selected Wallet)
+  // 'viewData' holds state for detailed views (e.g., the selected token object, wallet address, etc.)
   const [viewData, setViewData] = useState<any>(null);
 
-  // --- BACKGROUND WORKER (CLIENT-SIDE BOT) ---
+  // --- BACKGROUND WORKER ---
   useEffect(() => {
     DatabaseService.checkAndTriggerIngestion();
     const intervalId = setInterval(() => {
@@ -41,20 +41,20 @@ const App: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- HISTORY MANAGEMENT (The "Peeling Layer" Logic) ---
+  // --- HISTORY API INTEGRATION ---
   useEffect(() => {
-    // 1. Initialize history state if null
+    // 1. Ensure we have a state object for the initial load
     if (!window.history.state) {
       window.history.replaceState({ view: 'overview', data: null }, '');
     }
 
-    // 2. Listen for Browser Back/Forward Buttons
+    // 2. Listen for Back/Forward buttons
     const handlePopState = (event: PopStateEvent) => {
       if (event.state) {
         setView(event.state.view);
         setViewData(event.state.data);
       } else {
-        // Fallback to overview if state is lost
+        // Fallback if history state is missing
         setView('overview');
         setViewData(null);
       }
@@ -65,16 +65,17 @@ const App: React.FC = () => {
   }, []);
 
   // Central Navigation Function
+  // Usage: navigate('token-details', selectedTokenObject)
   const navigate = (newView: ViewState, data: any = null) => {
     setView(newView);
     setViewData(data);
-    // Push new state to history stack so Back button works
+    // Push new state to browser history
     window.history.pushState({ view: newView, data }, '');
-    // Scroll to top
+    // Scroll to top on navigation
     window.scrollTo(0, 0);
   };
 
-  // Unified Back Handler
+  // Helper to go back (native browser behavior)
   const goBack = () => {
     window.history.back();
   };
@@ -88,9 +89,11 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
+      // DASHBOARD: Clicking a token navigates to details
       case 'overview': 
         return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
       
+      // TOKEN DETAILS: Receives token data from viewData
       case 'token-details': 
         return <TokenDetails token={viewData} onBack={goBack} />;
       
@@ -100,13 +103,15 @@ const App: React.FC = () => {
       case 'heatmap': 
         return <Heatmap />;
       
+      // SENTIMENT: Supports drill-down if viewData is provided
       case 'sentiment': 
         return <Sentiment 
           initialContract={viewData} 
-          onAnalyze={(c) => navigate('sentiment', c)} 
+          onAnalyze={(contract) => navigate('sentiment', contract)} 
           onBack={goBack} 
         />;
       
+      // DETECTION: Search triggers specific token detection view
       case 'detection': 
         return <Detection onSearch={(t) => navigate('token-detection', t)} />;
       
@@ -119,18 +124,20 @@ const App: React.FC = () => {
       case 'chatbot': 
         return <Chatbot />;
       
+      // WALLET TRACKING: Supports drilling down into a specific wallet profile
       case 'wallet-tracking': 
         return <WalletTracking 
           initialWallet={viewData} 
-          onSelectWallet={(w) => navigate('wallet-tracking', w)}
+          onSelectWallet={(w) => navigate('wallet-tracking', w)} 
           onBack={goBack}
         />;
       
+      // SAFE SCAN: Supports drill-down result
       case 'safe-scan': 
         return <SafeScan 
           initialContract={viewData} 
-          onScan={(c) => navigate('safe-scan', c)}
-          onBack={goBack}
+          onScan={(c) => navigate('safe-scan', c)} 
+          onBack={goBack} 
         />;
       
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;

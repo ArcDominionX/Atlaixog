@@ -25,11 +25,10 @@ interface WalletTrackingProps {
 }
 
 export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack }) => {
-    // If initialWallet is present (passed from App history), we show profile view. 
-    // Otherwise we show dashboard.
+    // Determine view mode based on presence of initialWallet (passed from history state)
     const viewMode = initialWallet ? 'profile' : 'dashboard';
     
-    // We only need local state for filters/search on the dashboard
+    // Local state for dashboard filters
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [walletType, setWalletType] = useState('Smart Money');
     const [chain, setChain] = useState('All Chains');
