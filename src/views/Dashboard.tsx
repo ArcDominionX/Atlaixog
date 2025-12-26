@@ -42,8 +42,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
-    // Sorting State - Default: DEX Flow (Net Flow) Descending
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'change', direction: 'desc' });
+    // Sorting State - Default to NEWEST (Age) to show fresh tokens first, fall back to Volume
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdTimestamp', direction: 'desc' });
 
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
@@ -74,9 +74,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     useEffect(() => {
         loadData(); // Initial load
 
-        // Auto-refresh every 10 seconds to satisfy "Self-Updating" requirement
+        // Auto-refresh UI every 10 seconds
         const interval = setInterval(() => {
-            loadData(false);
+            loadData(false); // Passive refresh
         }, 10000);
 
         return () => clearInterval(interval);
@@ -117,9 +117,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
         };
 
         const handleScroll = () => {
-            if (activeFilter) {
-                setActiveFilter(null);
-            }
+            if (activeFilter) setActiveFilter(null);
         };
 
         document.addEventListener('mousedown', handleClickOutside);
@@ -158,6 +156,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             const { key, direction } = sortConfig;
             
             const getValue = (item: MarketCoin) => {
+                if (key === 'createdTimestamp') return item.createdTimestamp; // Sort by Age
                 if (key === 'change') return parseFloat(item.h24.replace('%', '').replace(',', ''));
                 if (key === 'ticker') return item.ticker;
                 if (key === 'price') return parseCurrency(item.price);
