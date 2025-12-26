@@ -11,21 +11,14 @@ const DEXSCREENER_API_URL = 'https://api.dexscreener.com/latest/dex/search';
 
 // --- RELAXED REQUIREMENTS FOR RAPID POPULATION ---
 const REQUIREMENTS = {
-    // Lowered liquidity floor to fill list fast
+    // Keep low to fill list
     MIN_LIQUIDITY_USD: 2000,    
-    
-    // Basic activity check
     MIN_VOLUME_24H: 1000,       
-    
-    // Minimal transaction count
     MIN_TXNS_24H: 10,            
-    
-    // Minimal valuation
     MIN_FDV: 5000
 };
 
 // --- EXCLUSION LIST ---
-// We filter these out as "Primary" tokens to focus on the projects trading against them.
 const EXCLUDED_SYMBOLS = [
     'SOL', 'WSOL', 'ETH', 'WETH', 'BTC', 'WBTC', 'BNB', 'WBNB', 
     'USDC', 'USDT', 'DAI', 'BUSD', 'TUSD', 'USDS', 'EURC', 'STETH', 
@@ -33,12 +26,11 @@ const EXCLUDED_SYMBOLS = [
 ];
 
 // --- EXPANDED DISCOVERY QUERIES ---
-// Massive list of keywords to "fish" for tokens in different sectors
 const TARGET_QUERIES = [
     // 1. Chains & Majors
     'SOL', 'BASE', 'BSC', 'ETH', 'ARBITRUM', 'POLYGON', 'AVALANCHE', 'OPTIMISM', 'SUI', 'TRON',
     
-    // 2. Common Tickers & Memes (The "Long Tail")
+    // 2. Common Tickers & Memes
     'PEPE', 'DOGE', 'SHIB', 'FLOKI', 'BONK', 'WIF', 'MOG', 'TRUMP', 'MAGA', 'BIDEN', 
     'ELON', 'MOON', 'SAFE', 'CAT', 'DOG', 'INU', 'APE', 'KONG', 'FROG', 'TOAD',
     
@@ -58,9 +50,13 @@ const TARGET_QUERIES = [
 ];
 
 // --- SMART ROTATION STATE ---
+// We shuffle the queries once on load, then cycle through them sequentially.
+// This ensures we cover ALL topics and don't just randomly pick "SOL" 10 times.
 let currentQueryIndex = 0;
-const BATCH_SIZE_BACKGROUND = 5; 
-const BATCH_SIZE_FULL = 15; // Scan 15 different keywords at once to fill list
+const SHUFFLED_QUERIES = [...TARGET_QUERIES].sort(() => Math.random() - 0.5);
+
+// Reduced batch size to prevent Rate Limiting (429 Errors)
+const BATCH_SIZE = 5; 
 
 // Helpers
 const formatCurrency = (value: number) => {
@@ -104,19 +100,6 @@ const getChainId = (chainId: string) => {
     return 'ethereum'; 
 };
 
-// Returns a random subset of the array
-const getRandomSubarray = (arr: string[], size: number) => {
-    const shuffled = arr.slice(0);
-    let i = arr.length, temp, index;
-    while (i--) {
-        index = Math.floor(Math.random() * (i + 1));
-        temp = shuffled[index];
-        shuffled[index] = shuffled[i];
-        shuffled[i] = temp;
-    }
-    return shuffled.slice(0, size);
-};
-
 // API Response Types
 interface DexPair {
     chainId: string;
@@ -139,13 +122,21 @@ interface Cache {
     marketData: { data: MarketCoin[]; timestamp: number; } | null;
 }
 const cache: Cache = { marketData: null };
-const CACHE_FRESH_DURATION = 30000; // 30s cache
+
+// INCREASED CACHE DURATION TO 60 SECONDS
+// This frees up API rate limits so we can focus on DISCOVERY instead of updating existing prices constantly.
+const CACHE_FRESH_DURATION = 60000; 
 
 // --- ROBUST FETCH STRATEGY ---
 const fetchWithFallbacks = async (query: string): Promise<any> => {
     const directUrl = `${DEXSCREENER_API_URL}?q=${query}`;
     try {
         const response = await fetch(directUrl);
+        // If we hit a rate limit, return empty but don't crash
+        if (response.status === 429) {
+            console.warn("Rate limit hit, skipping query:", query);
+            return { pairs: [] };
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return data || { pairs: [] };
@@ -169,6 +160,7 @@ export const DatabaseService = {
     getMarketData: async (force: boolean = false, partial: boolean = false): Promise<{ data: MarketCoin[], source: 'LIVE_API' | 'CACHE' | 'SUPABASE', latency: number }> => {
         const start = performance.now();
         
+        // Return cached data if valid and we aren't forcing a refresh
         if (!force && !partial && cache.marketData) {
             const age = Date.now() - cache.marketData.timestamp;
             if (age < CACHE_FRESH_DURATION) {
@@ -184,32 +176,22 @@ export const DatabaseService = {
             // Step 1: Get History from Supabase
             const dbPromise = DatabaseService.fetchFromSupabase();
             
-            // Step 2: Live Fetch Logic
+            // Step 2: Live Fetch Logic (Discovery)
             let queriesToRun: string[] = [];
             
-            if (partial) {
-                // INCREMENTAL SCAN: Only pick the next small batch
-                const end = Math.min(currentQueryIndex + BATCH_SIZE_BACKGROUND, TARGET_QUERIES.length);
-                queriesToRun = TARGET_QUERIES.slice(currentQueryIndex, end);
-                currentQueryIndex = end >= TARGET_QUERIES.length ? 0 : end;
-            } else {
-                // FULL / RANDOMIZED SCAN (Initial Load or Refresh)
-                // Pick RANDOM queries to ensure we get different tokens every time
-                queriesToRun = getRandomSubarray(TARGET_QUERIES, BATCH_SIZE_FULL);
-            }
+            // Always run in small batches now to prevent 429 errors
+            // We cycle through SHUFFLED_QUERIES sequentially.
+            const end = Math.min(currentQueryIndex + BATCH_SIZE, SHUFFLED_QUERIES.length);
+            queriesToRun = SHUFFLED_QUERIES.slice(currentQueryIndex, end);
+            
+            // Increment index, wrap around if needed
+            currentQueryIndex = end >= SHUFFLED_QUERIES.length ? 0 : end;
 
             // Execute Live Fetch
-            const chunks = chunkArray(queriesToRun, 5); // Fetch 5 queries at a time
-            let apiResults: any[] = [];
+            const chunkResults = await Promise.all(queriesToRun.map(q => fetchWithFallbacks(q)));
             
-            for (const chunk of chunks) {
-                const chunkResults = await Promise.all(chunk.map(q => fetchWithFallbacks(q)));
-                apiResults = [...apiResults, ...chunkResults];
-                if (!partial) await new Promise(r => setTimeout(r, 20)); // Tiny delay
-            }
-
             let rawPairs: DexPair[] = [];
-            apiResults.forEach(result => {
+            chunkResults.forEach(result => {
                 if (result && result.pairs) {
                     rawPairs = [...rawPairs, ...result.pairs];
                 }
@@ -225,7 +207,6 @@ export const DatabaseService = {
             for (const p of rawPairs) {
                  const symbol = p.baseToken.symbol.toUpperCase();
                  
-                 // Deduplication
                  if (EXCLUDED_SYMBOLS.includes(symbol)) continue; 
                  if (seenSymbols.has(symbol)) continue;
                  
@@ -384,7 +365,7 @@ export const DatabaseService = {
 
     fetchFromSupabase: async (): Promise<MarketCoin[]> => {
         try {
-            // Increased limit
+            // Limit increased to ensure we get a full list
             const { data, error } = await supabase
                 .from('discovered_tokens')
                 .select('*')
@@ -407,6 +388,7 @@ export const DatabaseService = {
     },
     
     checkAndTriggerIngestion: async () => {
+        // Trigger background fetch, which now uses the sequential index logic
         await DatabaseService.getMarketData(true, true);
     }
 };

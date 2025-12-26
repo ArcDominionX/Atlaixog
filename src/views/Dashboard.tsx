@@ -74,10 +74,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     useEffect(() => {
         loadData(); // Initial load
 
-        // Auto-refresh UI every 10 seconds
+        // Auto-refresh UI every 60 seconds (Rate Limit Friendly)
         const interval = setInterval(() => {
             loadData(false); // Passive refresh
-        }, 10000);
+        }, 60000);
 
         return () => clearInterval(interval);
     }, [timeFrame]); 
