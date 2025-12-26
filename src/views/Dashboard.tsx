@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, Plus, Search, ChevronRight, ChevronLeft, Settings, Database, Server, Flame, ArrowUpRight, ArrowDownRight, Clock, Info, RefreshCw } from 'lucide-react';
+import { Activity, Zap, TrendingUp, ShieldAlert, Scan, Wallet, Bell, ChevronDown, Plus, Search, ChevronRight, ChevronLeft, Settings, Database, Server, Flame, ArrowUpRight, ArrowDownRight, Clock, Info, RefreshCw, Wifi } from 'lucide-react';
 import { MarketCoin } from '../types';
 import { DualRangeSlider } from '../components/DualRangeSlider';
 import { DatabaseService } from '../services/DatabaseService';
@@ -30,11 +30,6 @@ const parseCurrency = (val: string | number) => {
 export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     const [timeFrame, setTimeFrame] = useState('12H');
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
-    const [mcapMin, setMcapMin] = useState(2);
-    const [mcapMax, setMcapMax] = useState(5);
-    const [ageFrom, setAgeFrom] = useState('< 1 day');
-    const [ageTo, setAgeTo] = useState('> 1 year');
-    const [activeAgeDropdown, setActiveAgeDropdown] = useState<'from' | 'to' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     
     // Pagination State
@@ -47,7 +42,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [dbStatus, setDbStatus] = useState<{source: string, latency: number} | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     
     // Refs for positioning
@@ -55,13 +49,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
 
     // Load Data Function
     const loadData = async (force: boolean = false) => {
-        // Only show spinner on initial load or manual force
+        // Only show full spinner on initial load or manual force
         if (marketData.length === 0 || force) setIsLoading(true);
         
         try {
-            const response = await DatabaseService.getMarketData(force);
+            // Dashboard always requests a full standard view (not partial)
+            const response = await DatabaseService.getMarketData(force, false);
             setMarketData(response.data);
-            setDbStatus({ source: response.source, latency: response.latency });
             setLastUpdated(new Date());
         } catch (e) {
             console.error("DB Error", e);
@@ -74,7 +68,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     useEffect(() => {
         loadData(); // Initial load
 
-        // Auto-refresh every 10 seconds for "Fast" updates
+        // Auto-refresh UI every 10 seconds
         const interval = setInterval(() => {
             loadData(false); // Passive refresh
         }, 10000);
@@ -84,7 +78,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
 
     const toggleFilter = (filterName: string) => {
         setActiveFilter(activeFilter === filterName ? null : filterName);
-        setActiveAgeDropdown(null);
     };
 
     const handleSearchSubmit = () => {
@@ -113,16 +106,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                 const target = event.target as Element;
                 if (!target.closest('.filter-wrapper') && !target.closest('.filter-popup')) {
                     setActiveFilter(null);
-                    setActiveAgeDropdown(null);
                 }
             }
         };
 
         const handleScroll = () => {
-            if (activeFilter) {
-                setActiveFilter(null);
-                setActiveAgeDropdown(null);
-            }
+            if (activeFilter) setActiveFilter(null);
         };
 
         document.addEventListener('mousedown', handleClickOutside);
@@ -135,7 +124,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     }, [activeFilter]);
 
     const getChange = (coin: MarketCoin) => { 
-        // Using static data for now, but logical flow for timeframe scaling
         return coin.h24;
     };
 
@@ -220,7 +208,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             case 'ethereum': return 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
             case 'solana': return 'https://cryptologos.cc/logos/solana-sol-logo.png';
             case 'bsc': return 'https://cryptologos.cc/logos/bnb-bnb-logo.png';
-            case 'base': return 'https://cryptologos.cc/logos/ethereum-eth-logo.png'; // Using Eth logo for Base for now
+            case 'base': return 'https://cryptologos.cc/logos/ethereum-eth-logo.png'; 
             case 'xrp': return 'https://cryptologos.cc/logos/xrp-xrp-logo.png';
             default: return 'https://via.placeholder.com/20';
         }

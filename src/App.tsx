@@ -28,19 +28,18 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 );
 
 const App: React.FC = () => {
-  // Changed initial view to 'overview' to skip auth/network on first load
   const [view, setView] = useState<ViewState>('overview');
   const [selectedToken, setSelectedToken] = useState<string>('');
   const [selectedTokenData, setSelectedTokenData] = useState<MarketCoin | string>('');
 
-  // --- BACKGROUND WORKER ---
-  // This ensures the database stays populated even if the user isn't on the dashboard
+  // --- BACKGROUND WORKER (CLIENT-SIDE BOT) ---
+  // This enables "Crowdsourced" updates. When a user is online, their browser
+  // periodically scans a small slice of the market and updates the global database.
   useEffect(() => {
-    // 1. Initial check on mount
+    // 1. Initial background scan
     DatabaseService.checkAndTriggerIngestion();
 
-    // 2. Periodic check every 15 seconds (Aggressive Keep-Alive)
-    // We check frequently so that the MOMENT data is > 60s old, we refresh it.
+    // 2. Periodic incremental scan every 15 seconds
     const intervalId = setInterval(() => {
         DatabaseService.checkAndTriggerIngestion();
     }, 15000);
