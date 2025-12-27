@@ -5,13 +5,14 @@ export type ChainType = 'Solana' | 'Ethereum' | 'BSC' | 'Polygon' | 'Avalanche' 
 
 export interface PortfolioData {
     netWorth: string;
-    rawNetWorth: number; // Added for charts
+    rawNetWorth: number;
     assets: {
         symbol: string;
         balance: string;
         value: string;
         price: string;
         logo: string;
+        address: string; // Added address for navigation
     }[];
     recentActivity: RealActivity[];
     providerUsed: 'Moralis' | 'Cache';
@@ -73,7 +74,7 @@ const fetchFromMoralis = async (chain: string, address: string): Promise<Portfol
         const decimals = b.decimals || 18;
         const bal = parseFloat(b.balance) / Math.pow(10, decimals);
         // Estimate price if missing (fallback logic)
-        const price = b.price_usd || (b.usd_value && bal > 0 ? b.usd_value / bal : 0);
+        const price = b.price_usd || (b.usd_value ? b.usd_value / bal : 0);
         const value = b.usd_value || (bal * price);
         
         totalUsd += value;
@@ -83,7 +84,8 @@ const fetchFromMoralis = async (chain: string, address: string): Promise<Portfol
             balance: `${bal.toLocaleString(undefined, {maximumFractionDigits: 4})} ${b.symbol}`,
             value: `$${value.toLocaleString(undefined, {maximumFractionDigits: 2})}`,
             price: `$${price.toLocaleString(undefined, {maximumFractionDigits: 4})}`,
-            logo: b.logo || `https://ui-avatars.com/api/?name=${b.symbol}&background=random`
+            logo: b.logo || `https://ui-avatars.com/api/?name=${b.symbol}&background=random`,
+            address: b.token_address // Map token address
         };
     }).sort((a, b) => parseFloat(b.value.replace('$','').replace(',','')) - parseFloat(a.value.replace('$','').replace(',','')));
 

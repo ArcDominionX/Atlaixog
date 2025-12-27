@@ -20,8 +20,9 @@ interface WalletData {
 
 interface WalletTrackingProps {
     initialWallet?: WalletData | string | null;
-    onSelectWallet: (wallet: WalletData) => void;
-    onBack: () => void;
+    onSelectWallet?: (wallet: WalletData) => void;
+    onBack?: () => void;
+    onTokenSelect?: (token: string) => void;
 }
 
 // Helpers
@@ -30,15 +31,17 @@ const isSolanaAddress = (addr: string) => {
     return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
 };
 
-export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack }) => {
-    // Resolve initial prop
+export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack, onTokenSelect }) => {
+    // Resolve initial prop if passed from other views
     const effectiveWallet: WalletData | null = typeof initialWallet === 'string' 
         ? { id: 0, addr: initialWallet, tag: 'Unknown', bal: 'Loading...', pnl: '0%', win: '0%', tokens: 0, time: '', type: 'smart' }
         : (initialWallet as WalletData) || null;
 
-    const viewMode = effectiveWallet ? 'profile' : 'dashboard';
-    
-    // State
+    // View mode defaults to dashboard, but if we have a wallet via props or local state, show profile
+    const [localViewMode, setLocalViewMode] = useState<'dashboard' | 'profile'>('dashboard');
+    const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(effectiveWallet);
+    const viewMode = selectedWallet ? 'profile' : 'dashboard';
+
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [walletType, setWalletType] = useState('Smart Money');
     const [chain, setChain] = useState('Ethereum'); // Default
@@ -53,30 +56,42 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
     const chartInstance = useRef<any>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
-    // --- AUTO-DETECT CHAIN ON MOUNT ---
+    // --- AUTO-DETECT CHAIN ---
     useEffect(() => {
-        if (effectiveWallet?.addr) {
-            if (isSolanaAddress(effectiveWallet.addr)) {
+        if (selectedWallet?.addr) {
+            if (isSolanaAddress(selectedWallet.addr)) {
                 setChain('Solana');
-            } else {
-                setChain('Ethereum'); // Default EVM
+            } else if (selectedWallet.addr.startsWith('0x')) {
+                // Only reset to Ethereum if current chain implies a non-EVM context like Solana
+                // If user is on BSC, we might want to keep it, but for a fresh search, Ethereum is a safer EVM default
+                if (chain === 'Solana' || chain === 'All Chains') {
+                    setChain('Ethereum');
+                }
             }
         }
-    }, [effectiveWallet]);
+    }, [selectedWallet]);
 
     const toggleFilter = (name: string) => setActiveFilter(activeFilter === name ? null : name);
     
-    // Search Logic
+    const openWallet = (w: WalletData) => { 
+        setSelectedWallet(w); 
+    };
+
+    const handleBackToDashboard = () => {
+        setSelectedWallet(null);
+        if(onBack) onBack(); // If parent control
+    };
+
     const handleTrack = () => {
-        if (!searchQuery.trim()) return;
+        const input = searchQuery.trim();
+        if (!input) return;
         
-        // Auto-detect chain for new searches
-        const targetChain = isSolanaAddress(searchQuery) ? 'Solana' : 'Ethereum';
+        const targetChain = isSolanaAddress(input) ? 'Solana' : 'Ethereum';
         
         const searchedWallet: WalletData = {
             id: Date.now(),
-            addr: searchQuery,
-            tag: 'New Track',
+            addr: input,
+            tag: 'Tracked',
             bal: '...',
             pnl: '0%',
             win: '0%',
@@ -85,9 +100,15 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             type: 'smart'
         };
         
-        // Force chain state update before navigation if possible, or let the Effect handle it
         setChain(targetChain); 
-        onSelectWallet(searchedWallet);
+        
+        // Use prop if available, otherwise internal state
+        if (onSelectWallet) {
+            onSelectWallet(searchedWallet);
+        } else {
+            openWallet(searchedWallet);
+        }
+        
         setSearchQuery('');
     };
 
@@ -115,10 +136,10 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
     // --- FETCH DATA ---
     useEffect(() => {
         const fetchData = async () => {
-            if (viewMode === 'profile' && effectiveWallet) {
+            if (viewMode === 'profile' && selectedWallet) {
                 setLoading(true);
                 try {
-                    const data = await ChainRouter.fetchPortfolio(chain, effectiveWallet.addr);
+                    const data = await ChainRouter.fetchPortfolio(chain, selectedWallet.addr);
                     setPortfolioData(data);
                 } catch (e) {
                     console.error("Failed to fetch wallet data", e);
@@ -128,30 +149,25 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             }
         };
         fetchData();
-    }, [viewMode, effectiveWallet, chain]); 
+    }, [viewMode, selectedWallet, chain]); 
 
     // --- CHART (Simulated History based on Real Current Value) ---
     useEffect(() => {
         if (viewMode === 'profile' && netWorthChartRef.current && typeof ApexCharts !== 'undefined' && !loading && portfolioData) {
             
-            // Generate a plausible chart ending at rawNetWorth
             const current = portfolioData.rawNetWorth || 0;
             const points = 14; 
             const data: number[] = [];
             const categories: string[] = [];
             
-            // Walk backwards from current value
-            let val = current;
+            let val = current > 0 ? current : 1000;
             for (let i = 0; i < points; i++) {
                 data.unshift(parseFloat(val.toFixed(2)));
                 categories.unshift(`${points - i}d ago`);
-                // Random drift 5%
                 const change = val * (Math.random() * 0.1 - 0.05); 
                 val -= change;
                 if(val < 0) val = 0;
             }
-
-            // Correct last point to exact match
             data[points-1] = parseFloat(current.toFixed(2));
             categories[points-1] = 'Today';
 
@@ -192,7 +208,6 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
 
     // Dashboard View
     if (viewMode === 'dashboard') {
-        // Mock data logic... (Preserved from previous, but shortened for brevity as focus is Profile)
         const mockWallets: WalletData[] = [
             { id: 1, addr: '0x7180...e68', tag: 'Whale', bal: '$4.53M', pnl: '+25.1%', win: '59%', tokens: 12, time: '1m ago', type: 'whale' },
             { id: 2, addr: '0x02f7...94e6', tag: 'Smart Money', bal: '$4.46M', pnl: '+8.8%', win: '59%', tokens: 23, time: '5m ago', type: 'smart' },
@@ -255,7 +270,12 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                     <div className="text-[10px] text-text-medium mb-1 font-medium uppercase tracking-wide">Total Portfolio Value</div>
                                     <div className="text-2xl font-bold">{w.bal}</div>
                                 </div>
-                                <button className="flex-1 py-2 border border-border rounded-lg text-[10px] font-bold hover:bg-card-hover hover:text-text-light transition-all uppercase tracking-wide" onClick={() => onSelectWallet(w)}>View Wallet</button>
+                                <button 
+                                    className="flex-1 py-2 border border-border rounded-lg text-[10px] font-bold hover:bg-card-hover hover:text-text-light transition-all uppercase tracking-wide" 
+                                    onClick={() => onSelectWallet ? onSelectWallet(w) : openWallet(w)}
+                                >
+                                    View Wallet
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -267,7 +287,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
     // Profile View
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
-            <div className="flex items-center gap-2 text-text-medium hover:text-text-light cursor-pointer mb-2 w-fit transition-colors font-medium text-sm" onClick={onBack}>
+            <div className="flex items-center gap-2 text-text-medium hover:text-text-light cursor-pointer mb-2 w-fit transition-colors font-medium text-sm" onClick={handleBackToDashboard}>
                 <ArrowLeft size={18} /> Back to Dashboard
             </div>
             
@@ -300,7 +320,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                 {chain[0]}
                             </div>
                             <div className="min-w-0">
-                                <div className="text-xl md:text-2xl font-bold font-mono truncate text-text-light">{effectiveWallet?.addr}</div>
+                                <div className="text-xl md:text-2xl font-bold font-mono truncate text-text-light">{selectedWallet?.addr}</div>
                                 <div className="flex gap-2 mt-1">
                                     <span className="text-xs px-2 py-0.5 rounded font-bold uppercase bg-primary-green/10 text-primary-green border border-primary-green/30">Active</span>
                                     <span className="text-xs px-2 py-0.5 rounded font-bold uppercase bg-card border border-border text-text-medium">{chain}</span>
@@ -354,8 +374,12 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                             <tr><td colSpan={4} className="py-8 text-center text-text-medium italic">No assets found on {chain}</td></tr>
                                         ) : (
                                             portfolioData?.assets.map((p, i) => (
-                                                <tr key={i} className="border-b border-border last:border-0 hover:bg-card-hover/50 transition-colors">
-                                                    <td className="py-3 pl-1 font-bold flex items-center gap-2">
+                                                <tr 
+                                                    key={i} 
+                                                    className="border-b border-border last:border-0 hover:bg-card-hover/50 transition-colors cursor-pointer group"
+                                                    onClick={() => onTokenSelect && onTokenSelect(p.address)}
+                                                >
+                                                    <td className="py-3 pl-1 font-bold flex items-center gap-2 group-hover:text-primary-green transition-colors">
                                                         <img src={p.logo} className="w-6 h-6 rounded-full bg-main" onError={(e) => e.currentTarget.src='https://via.placeholder.com/24'} /> 
                                                         {p.symbol}
                                                     </td>
@@ -370,12 +394,12 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                             </div>
                         </div>
                         
-                        {/* Activity Feed */}
+                        {/* Recent Transactions Feed */}
                         <div className="bg-card border border-border rounded-xl p-6 flex flex-col h-[500px]">
-                            <h3 className="card-title text-base flex items-center gap-2"><Zap size={18} /> Recent Activity</h3>
+                            <h3 className="card-title text-base flex items-center gap-2"><Zap size={18} /> Recent Transactions</h3>
                             <div className="overflow-y-auto custom-scrollbar flex-1 -mr-2 pr-2 flex flex-col">
                                 {portfolioData?.recentActivity.length === 0 ? (
-                                    <div className="py-8 text-center text-text-medium italic">No recent transactions</div>
+                                    <div className="py-8 text-center text-text-medium italic">No recent transactions found</div>
                                 ) : (
                                     portfolioData?.recentActivity.map((act, i) => (
                                         <div key={i} className="flex gap-4 py-3 border-b border-border last:border-0 hover:bg-card-hover/30 transition-colors px-2 rounded-lg">
