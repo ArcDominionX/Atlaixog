@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Copy, ExternalLink, Zap, Trash, Lock, ArrowLeft, RefreshCw, Layers, ArrowUpRight, ArrowDownLeft, Repeat, CheckCircle, Wallet } from 'lucide-react';
+import { Search, ChevronDown, Copy, ExternalLink, Zap, Trash, Lock, ArrowLeft, RefreshCw, Layers, ArrowUpRight, ArrowDownLeft, Repeat, CheckCircle, Wallet, AlertTriangle } from 'lucide-react';
 import { ChainRouter, PortfolioData } from '../services/ChainRouter';
 
 // Declare ApexCharts
@@ -44,7 +44,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
 
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [walletType, setWalletType] = useState('Smart Money');
-    const [chain, setChain] = useState('Ethereum'); // Default
+    const [chain, setChain] = useState('All Chains'); // Default to All Chains
     const [searchQuery, setSearchQuery] = useState('');
     
     const [loading, setLoading] = useState(false);
@@ -62,11 +62,9 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             if (isSolanaAddress(selectedWallet.addr)) {
                 setChain('Solana');
             } else if (selectedWallet.addr.startsWith('0x')) {
-                // Only reset to Ethereum if current chain implies a non-EVM context like Solana
-                // If user is on BSC, we might want to keep it, but for a fresh search, Ethereum is a safer EVM default
-                if (chain === 'Solana' || chain === 'All Chains') {
-                    setChain('Ethereum');
-                }
+                // ALWAYS default to All Chains for EVM addresses to ensure we calculate total Net Worth across networks
+                // This satisfies the requirement to "automatically navigate" to where tokens are.
+                setChain('All Chains');
             }
         }
     }, [selectedWallet]);
@@ -86,7 +84,8 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
         const input = searchQuery.trim();
         if (!input) return;
         
-        const targetChain = isSolanaAddress(input) ? 'Solana' : 'Ethereum';
+        // Explicitly detect chain before setting state to ensure immediate feedback logic is correct
+        const targetChain = isSolanaAddress(input) ? 'Solana' : 'All Chains';
         
         const searchedWallet: WalletData = {
             id: Date.now(),
@@ -100,6 +99,8 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             type: 'smart'
         };
         
+        setLoading(true); // Start loading immediately
+        setPortfolioData(null); // Clear old data
         setChain(targetChain); 
         
         // Use prop if available, otherwise internal state
@@ -139,6 +140,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             if (viewMode === 'profile' && selectedWallet) {
                 setLoading(true);
                 try {
+                    // Pass the current 'chain' state which should match the wallet type due to logic in handleTrack/useEffect
                     const data = await ChainRouter.fetchPortfolio(chain, selectedWallet.addr);
                     setPortfolioData(data);
                 } catch (e) {
@@ -300,6 +302,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                     <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-text-medium">
                         <span className="text-[10px] uppercase font-bold tracking-wide">Network:</span>
                         <select value={chain} onChange={(e) => setChain(e.target.value)} className="bg-transparent border-none outline-none font-bold text-text-light cursor-pointer">
+                            <option value="All Chains">All Chains</option>
                             {['Ethereum', 'Solana', 'BSC', 'Avalanche', 'Base', 'Polygon'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
@@ -314,10 +317,24 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 </div>
             ) : (
                 <>
+                    {/* SIMULATED DATA WARNING */}
+                    {portfolioData?.isSimulated && (
+                        <div className="bg-primary-yellow/10 border border-primary-yellow/30 rounded-xl p-4 flex items-center gap-3 animate-fade-in">
+                            <AlertTriangle className="text-primary-yellow flex-shrink-0" size={24} />
+                            <div>
+                                <h4 className="text-primary-yellow font-bold text-sm">Simulated Data Mode</h4>
+                                <p className="text-text-light text-xs mt-0.5">
+                                    We couldn't fetch real-time data for this address. It might be empty, dormant, or the API is experiencing issues.
+                                    Showing <span className="font-bold">simulated data</span> for demonstration.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                         <div className="flex items-center gap-4 overflow-hidden">
                             <div className="w-12 h-12 bg-gradient-to-br from-gray-700 to-black rounded-full flex items-center justify-center text-xl font-bold border border-border shadow-lg">
-                                {chain[0]}
+                                {chain === 'All Chains' ? '🌐' : chain[0]}
                             </div>
                             <div className="min-w-0">
                                 <div className="text-xl md:text-2xl font-bold font-mono truncate text-text-light">{selectedWallet?.addr}</div>
@@ -355,74 +372,48 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                         <div ref={netWorthChartRef} className="w-full min-h-[260px]"></div>
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-6">
-                        {/* Assets Table */}
-                        <div className="bg-card border border-border rounded-xl p-6 flex flex-col h-[500px]">
-                            <h3 className="card-title text-base flex items-center gap-2"><Wallet size={18} /> Asset Holdings</h3>
-                            <div className="overflow-y-auto custom-scrollbar flex-1 -mr-2 pr-2">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="sticky top-0 bg-card z-10 shadow-sm">
-                                        <tr className="text-text-dark text-[10px] font-bold uppercase tracking-wide border-b border-border">
-                                            <th className="pb-3 pl-1">Asset</th>
-                                            <th className="pb-3 text-right">Price</th>
-                                            <th className="pb-3 text-right">Balance</th>
-                                            <th className="pb-3 text-right pr-1">Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {portfolioData?.assets.length === 0 ? (
-                                            <tr><td colSpan={4} className="py-8 text-center text-text-medium italic">No assets found on {chain}</td></tr>
-                                        ) : (
-                                            portfolioData?.assets.map((p, i) => (
-                                                <tr 
-                                                    key={i} 
-                                                    className="border-b border-border last:border-0 hover:bg-card-hover/50 transition-colors cursor-pointer group"
-                                                    onClick={() => onTokenSelect && onTokenSelect(p.address)}
-                                                >
-                                                    <td className="py-3 pl-1 font-bold flex items-center gap-2 group-hover:text-primary-green transition-colors">
-                                                        <img src={p.logo} className="w-6 h-6 rounded-full bg-main" onError={(e) => e.currentTarget.src='https://via.placeholder.com/24'} /> 
-                                                        {p.symbol}
-                                                    </td>
-                                                    <td className="py-3 text-right text-text-medium">{p.price}</td>
-                                                    <td className="py-3 text-right text-text-medium">{p.balance.split(' ')[0]}</td>
-                                                    <td className="py-3 text-right font-mono font-bold text-text-light pr-1">{p.value}</td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        {/* Recent Transactions Feed */}
-                        <div className="bg-card border border-border rounded-xl p-6 flex flex-col h-[500px]">
-                            <h3 className="card-title text-base flex items-center gap-2"><Zap size={18} /> Recent Transactions</h3>
-                            <div className="overflow-y-auto custom-scrollbar flex-1 -mr-2 pr-2 flex flex-col">
-                                {portfolioData?.recentActivity.length === 0 ? (
-                                    <div className="py-8 text-center text-text-medium italic">No recent transactions found</div>
-                                ) : (
-                                    portfolioData?.recentActivity.map((act, i) => (
-                                        <div key={i} className="flex gap-4 py-3 border-b border-border last:border-0 hover:bg-card-hover/30 transition-colors px-2 rounded-lg">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 ${act.type === 'Buy' ? 'bg-primary-green/10 text-primary-green' : 'bg-primary-red/10 text-primary-red'}`}>
-                                                {act.type === 'Buy' ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-start mb-0.5">
-                                                    <span className={`font-bold text-sm ${act.type === 'Buy' ? 'text-primary-green' : 'text-primary-red'}`}>
-                                                        {act.type} {act.asset}
-                                                    </span>
-                                                    <span className="text-[10px] text-text-dark font-medium whitespace-nowrap">{act.time}</span>
-                                                </div>
-                                                <div className="text-xs text-text-medium font-medium truncate">{act.desc}</div>
-                                                <div className="flex justify-between items-center mt-1.5">
-                                                    <span className="text-[10px] bg-main border border-border px-1.5 py-0.5 rounded font-mono text-text-dark">{act.val} {act.asset}</span>
-                                                    <a href={`https://${chain === 'Solana' ? 'solscan.io/tx' : 'etherscan.io/tx'}/${act.hash}`} target="_blank" className="text-[10px] text-primary-blue hover:underline">View Tx</a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                    {/* Assets Table */}
+                    <div className="bg-card border border-border rounded-xl p-6 flex flex-col h-[600px]">
+                        <h3 className="card-title text-base flex items-center gap-2"><Wallet size={18} /> Asset Holdings</h3>
+                        <div className="overflow-y-auto custom-scrollbar flex-1 -mr-2 pr-2">
+                            <table className="w-full text-sm text-left">
+                                <thead className="sticky top-0 bg-card z-10 shadow-sm">
+                                    <tr className="text-text-dark text-[10px] font-bold uppercase tracking-wide border-b border-border">
+                                        <th className="pb-3 pl-1">Asset</th>
+                                        <th className="pb-3 text-right">Price</th>
+                                        <th className="pb-3 text-right">Balance</th>
+                                        <th className="pb-3 text-right pr-1">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {portfolioData?.assets.length === 0 ? (
+                                        <tr><td colSpan={4} className="py-8 text-center text-text-medium italic">No assets found on {chain}</td></tr>
+                                    ) : (
+                                        portfolioData?.assets.map((p, i) => (
+                                            <tr 
+                                                key={i} 
+                                                className="border-b border-border last:border-0 hover:bg-card-hover/50 transition-colors cursor-pointer group"
+                                                onClick={() => onTokenSelect && onTokenSelect(p.address)}
+                                            >
+                                                <td className="py-3 pl-1 font-bold flex items-center gap-2 group-hover:text-primary-green transition-colors">
+                                                    <img src={p.logo} className="w-6 h-6 rounded-full bg-main" onError={(e) => e.currentTarget.src='https://via.placeholder.com/24'} /> 
+                                                    <div className="flex flex-col">
+                                                        <span>{p.symbol}</span>
+                                                        {p.chain && (
+                                                            <span className="text-[9px] text-text-medium font-normal bg-card-hover px-1 rounded border border-border w-fit">
+                                                                {p.chain}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 text-right text-text-medium">{p.price}</td>
+                                                <td className="py-3 text-right text-text-medium">{p.balance.split(' ')[0]}</td>
+                                                <td className="py-3 text-right font-mono font-bold text-text-light pr-1">{p.value}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </>

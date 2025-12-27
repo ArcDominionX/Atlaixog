@@ -61,6 +61,12 @@ const mapChainToMoralisEVM = (chain: string) => {
     }
 };
 
+const NATIVE_TOKENS = {
+    solana: { address: 'So11111111111111111111111111111111111111112', symbol: 'SOL', name: 'Solana', decimals: 9, logo: 'https://cryptologos.cc/logos/solana-sol-logo.png' },
+    ethereum: { address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', symbol: 'ETH', name: 'Ethereum', decimals: 18, logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
+    bsc: { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', symbol: 'BNB', name: 'BNB', decimals: 18, logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png' }
+};
+
 export const MoralisService = {
     /**
      * Fetches real token transfers for a specific wallet
@@ -70,7 +76,6 @@ export const MoralisService = {
 
         const isSolana = chain.toLowerCase() === 'solana';
         
-        // Select Endpoint
         let url = '';
         if (isSolana) {
             url = `https://solana-gateway.moralis.io/account/mainnet/${address}/transfers?limit=20`;
@@ -90,7 +95,7 @@ export const MoralisService = {
             if (!response.ok) return [];
             
             const data = await response.json();
-            const transfers: any[] = isSolana ? data : (data.result || []); // Solana returns array, EVM returns object.result
+            const transfers: any[] = isSolana ? data : (data.result || []); 
 
             return transfers.map((tx) => {
                 const from = (tx.from_address || tx.from || '').toLowerCase();
@@ -99,20 +104,19 @@ export const MoralisService = {
                 
                 const isIncoming = to === myAddr;
                 
-                const symbol = tx.token_symbol || 'Token';
+                const symbol = tx.token_symbol || (isSolana ? 'SOL' : 'Token'); // Fallback for Sol transfers
                 const decimals = parseInt(tx.decimals || (isSolana ? '9' : '18'));
                 const val = parseFloat(tx.value) / Math.pow(10, decimals);
                 
-                // Construct Activity Object
                 return {
-                    type: isIncoming ? 'Buy' : 'Sell', // Simplified: In = Buy/Receive, Out = Sell/Send
+                    type: isIncoming ? 'Buy' : 'Sell', 
                     val: val < 0.001 ? '< 0.001' : val.toFixed(3),
                     asset: symbol,
                     desc: isIncoming ? `Received ${symbol}` : `Sent ${symbol}`,
                     time: getTimeAgo(tx.block_timestamp),
                     color: isIncoming ? 'text-primary-green' : 'text-primary-red',
-                    usd: '', // Historical price difficult to fetch in batch for free
-                    hash: tx.transaction_hash || tx.signature, // EVM vs Solana
+                    usd: '', 
+                    hash: tx.transaction_hash || tx.signature, 
                     wallet: isIncoming ? from : to,
                     tag: 'Wallet'
                 };
@@ -129,15 +133,10 @@ export const MoralisService = {
      * by comparing against the Liquidity Pair Address from DexScreener.
      */
     getTokenActivity: async (tokenAddress: string, chain: string, pairAddress: string, tokenPrice: number): Promise<RealActivity[]> => {
-        // Validate Token Address
-        if (!tokenAddress || tokenAddress.length < 20) {
-            console.warn("Invalid Token Address for Moralis");
-            return [];
-        }
+        if (!tokenAddress || tokenAddress.length < 20) return [];
 
         const isSolana = chain.toLowerCase() === 'solana';
         
-        // Select Endpoint
         let url = '';
         if (isSolana) {
             url = `https://solana-gateway.moralis.io/token/mainnet/${tokenAddress}/transfers?limit=50`;
@@ -154,13 +153,8 @@ export const MoralisService = {
                 }
             });
 
-            // Gracefully handle 404/400 without crashing
-            if (response.status === 404 || response.status === 400) {
-                console.warn(`Moralis data not found for ${tokenAddress} on ${chain}`);
-                return [];
-            }
-
-            if (!response.ok) throw new Error(`Moralis API Error: ${response.status} ${response.statusText}`);
+            if (response.status === 404 || response.status === 400) return [];
+            if (!response.ok) throw new Error(`Moralis API Error: ${response.status}`);
             
             const data = await response.json();
             const transfers: MoralisTransfer[] = data.result; 
@@ -168,18 +162,16 @@ export const MoralisService = {
             if (!transfers || transfers.length === 0) return [];
 
             return transfers.map((tx) => {
-                // Determine transaction type based on Pair Address
                 let type: RealActivity['type'] = 'Transfer';
                 let desc = 'Transferred';
                 let color = 'text-text-light';
                 
-                // Normalization for case-insensitive comparison
                 const from = tx.from_address.toLowerCase();
                 const to = tx.to_address.toLowerCase();
                 const pair = pairAddress ? pairAddress.toLowerCase() : '';
 
-                const isBuy = from === pair; // User received token FROM pair
-                const isSell = to === pair;  // User sent token TO pair
+                const isBuy = from === pair;
+                const isSell = to === pair;
 
                 if (isBuy && pair) {
                     type = 'Buy';
@@ -191,12 +183,10 @@ export const MoralisService = {
                     color = 'text-primary-red';
                 }
 
-                // Calculate Amount
                 const decimals = tx.decimals ? parseInt(tx.decimals.toString()) : (isSolana ? 9 : 18); 
                 const rawVal = parseFloat(tx.value) / Math.pow(10, decimals);
                 const usdVal = rawVal * tokenPrice;
 
-                // Identify Wallet Tags
                 let tag = 'Trader';
                 if (usdVal > 50000) tag = 'Whale';
                 else if (usdVal > 10000) tag = 'Smart Money';
@@ -210,7 +200,7 @@ export const MoralisService = {
                     color,
                     usd: `$${usdVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
                     hash: tx.transaction_hash,
-                    wallet: isBuy ? to : from, // The actor is the one NOT the pair
+                    wallet: isBuy ? to : from,
                     tag
                 };
             });
@@ -222,50 +212,98 @@ export const MoralisService = {
     },
 
     /**
-     * Fetches Wallet Balances for the Wallet Tracking Page
+     * Fetches Wallet Balances (Tokens + Native)
      */
     getWalletBalances: async (address: string, chain: string): Promise<WalletBalance[]> => {
         if (!address) return [];
 
         const isSolana = chain.toLowerCase() === 'solana';
+        const hexChain = mapChainToMoralisEVM(chain);
         
-        let url = '';
+        // 1. URLs for Tokens and Native Balance
+        let tokensUrl = '';
+        let nativeUrl = '';
+        let nativePriceUrl = '';
+        
+        const nativeConfig = isSolana ? NATIVE_TOKENS.solana : (chain.toLowerCase() === 'bsc' ? NATIVE_TOKENS.bsc : NATIVE_TOKENS.ethereum);
+
         if (isSolana) {
-            url = `https://solana-gateway.moralis.io/account/mainnet/${address}/tokens`;
+            tokensUrl = `https://solana-gateway.moralis.io/account/mainnet/${address}/tokens`;
+            nativeUrl = `https://solana-gateway.moralis.io/account/mainnet/${address}/balance`;
+            nativePriceUrl = `https://solana-gateway.moralis.io/token/mainnet/${nativeConfig.address}/price`;
         } else {
-            const hexChain = mapChainToMoralisEVM(chain);
-            url = `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${hexChain}&exclude_spam=true`;
+            tokensUrl = `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${hexChain}&exclude_spam=true`;
+            nativeUrl = `https://deep-index.moralis.io/api/v2.2/${address}/balance?chain=${hexChain}`;
+            nativePriceUrl = `https://deep-index.moralis.io/api/v2.2/erc20/${nativeConfig.address}/price?chain=${hexChain}`;
         }
 
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'accept': 'application/json',
-                    'X-API-Key': MORALIS_API_KEY
-                }
-            });
+            // Parallel Fetch - Use Promise.allSettled to ensure price failure doesn't block tokens
+            const [tokensRes, nativeRes, priceRes] = await Promise.allSettled([
+                fetch(tokensUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } }),
+                fetch(nativeUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } }),
+                fetch(nativePriceUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } })
+            ]);
 
-            if (!response.ok) return [];
-            
-            // Note: Solana Endpoint response structure is slightly different (array directly) vs EVM (object with result array usually)
-            // But Moralis standardized V2.2 mostly.
-            const data = await response.json();
-            
-            // Handle differences between EVM response (paginated) and Solana (array)
-            const tokens = Array.isArray(data) ? data : (data.result || []);
+            let tokensData: any = [];
+            if (tokensRes.status === 'fulfilled' && tokensRes.value.ok) {
+                tokensData = await tokensRes.value.json();
+            }
 
-            return tokens.map((t: any) => ({
-                token_address: t.token_address || t.mint, // EVM vs Solana
+            let nativeData: any = { balance: '0', solana: '0' };
+            if (nativeRes.status === 'fulfilled' && nativeRes.value.ok) {
+                nativeData = await nativeRes.value.json();
+            }
+
+            let priceData = { usdPrice: 0 };
+            if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
+                priceData = await priceRes.value.json();
+            }
+
+            // Process Tokens
+            const rawTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
+            
+            const processedTokens: WalletBalance[] = rawTokens.map((t: any) => ({
+                token_address: t.token_address || t.mint,
                 symbol: t.symbol,
                 name: t.name,
                 logo: t.logo || t.thumbnail,
                 decimals: t.decimals,
-                balance: t.balance, // Raw balance
+                balance: t.balance,
                 possible_spam: t.possible_spam,
                 verified_contract: t.verified_contract,
                 usd_value: t.usd_value,
                 price_usd: t.usd_price || 0
             }));
+
+            // Process Native Balance
+            const nativeBalRaw = isSolana ? (nativeData.lamports || nativeData.solana || '0') : (nativeData.balance || '0');
+            const nativeDecimals = nativeConfig.decimals;
+            const nativeBalVal = parseFloat(nativeBalRaw) / Math.pow(10, nativeDecimals);
+            
+            // Only add native token if balance > 0
+            if (nativeBalVal > 0) {
+                const nativePrice = priceData.usdPrice || 0;
+                const nativeUsdValue = nativeBalVal * nativePrice;
+                
+                const nativeToken: WalletBalance = {
+                    token_address: 'NATIVE',
+                    symbol: nativeConfig.symbol,
+                    name: nativeConfig.name,
+                    logo: nativeConfig.logo,
+                    decimals: nativeDecimals,
+                    balance: nativeBalRaw,
+                    possible_spam: false,
+                    verified_contract: true,
+                    usd_value: nativeUsdValue,
+                    price_usd: nativePrice
+                };
+                
+                // Add native token to start of list
+                processedTokens.unshift(nativeToken);
+            }
+
+            return processedTokens;
 
         } catch (error) {
             console.error("Failed to fetch wallet balances:", error);
