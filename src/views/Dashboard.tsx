@@ -40,10 +40,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 20;
     
-    // Sorting State - Default to NEWEST
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'createdTimestamp', direction: 'desc' });
+    // Sorting State - Default to VOLUME to show activity (Performance) rather than just Age
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'volume', direction: 'desc' });
 
     // Data & System State
     const [marketData, setMarketData] = useState<MarketCoin[]>([]);
@@ -74,10 +74,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     useEffect(() => {
         loadData(); // Initial load
 
-        // Auto-refresh UI every 10 seconds
+        // Auto-refresh UI every 60 seconds (Rate Limit Friendly)
         const interval = setInterval(() => {
             loadData(false); // Passive refresh
-        }, 10000);
+        }, 60000);
 
         return () => clearInterval(interval);
     }, [timeFrame]); 
@@ -156,7 +156,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             const { key, direction } = sortConfig;
             
             const getValue = (item: MarketCoin) => {
-                if (key === 'createdTimestamp') return item.createdTimestamp; // New Sort Key
+                if (key === 'createdTimestamp') return item.createdTimestamp; // Sort by Age
                 if (key === 'change') return parseFloat(item.h24.replace('%', '').replace(',', ''));
                 if (key === 'ticker') return item.ticker;
                 if (key === 'price') return parseCurrency(item.price);
@@ -165,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
                 if (key === 'volume') return parseCurrency(item.volume24h);
                 if (key === 'dexBuys') return parseCurrency(item.dexBuys);
                 if (key === 'dexSells') return parseCurrency(item.dexSells);
-                if (key === 'netFlow') return parseCurrency(item.netFlow);
+                if (key === 'netFlow') return parseCurrency(item.netFlow.replace('+', ''));
                 return 0;
             };
 
@@ -180,6 +180,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
     }, [marketData, sortConfig]);
 
     // --- AI MARKET PULSE LOGIC ---
+    const formatCompactCurrency = (num: number) => {
+        if (Math.abs(num) >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+        if (Math.abs(num) >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (Math.abs(num) >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toFixed(0);
+    };
+
     const marketPulse = useMemo(() => {
         // Defaults if no data
         if (!marketData.length) return {
@@ -191,7 +198,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             riskCount: 0
         };
 
-        // 1. Calculate Sentiment (Global Crypto Market State from Feed)
+        // 1. Calculate Sentiment
         let bullishCount = 0;
         let totalProcessed = 0;
         let totalMarketVolume = 0;
@@ -206,14 +213,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             totalProcessed++;
         });
 
-        // Base score starts at 50
         const bullRatio = totalProcessed > 0 ? bullishCount / totalProcessed : 0.5;
-        // Volume impact: If volume is high, sentiment is stronger. 
-        // We normalize volume loosely (assuming 50M is a "high" aggregate for a feed of gems)
         const volumeFactor = Math.min(totalMarketVolume / 50000000, 1) * 10; 
         
         let sentimentScore = Math.round((bullRatio * 80) + 10 + volumeFactor);
-        // Clamp
         if (sentimentScore > 98) sentimentScore = 98;
         if (sentimentScore < 5) sentimentScore = 5;
         
@@ -223,12 +226,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
         else if (sentimentScore <= 25) sentimentLabel = "Extreme Fear";
         else if (sentimentScore <= 40) sentimentLabel = "Bearish";
 
-        // 2. Find Top Inflow Token (Absolute Highest Net Flow)
-        // We sort by Net Flow descending
+        // 2. Find Top Inflow Token
         const tokensByFlow = [...marketData].sort((a, b) => parseCurrency(b.netFlow) - parseCurrency(a.netFlow));
         const topToken = tokensByFlow[0] || null;
 
-        // 3. Smart Rotation (Highest Performing Blockchain by Volume)
+        // 3. Smart Rotation
         const chainStats: Record<string, number> = {
             'solana': 0,
             'ethereum': 0,
@@ -240,7 +242,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             const chainKey = coin.chain.toLowerCase();
             const volume = parseCurrency(coin.volume24h);
             
-            // Normalize chain keys
             if (chainKey.includes('sol')) chainStats['solana'] += volume;
             else if (chainKey.includes('eth')) chainStats['ethereum'] += volume;
             else if (chainKey.includes('bsc') || chainKey.includes('bnb')) chainStats['bsc'] += volume;
@@ -257,10 +258,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             }
         });
         
-        // Manual override for display nice names
         if (bestChain === 'Bsc') bestChain = 'BSC';
 
-        // 4. Risk (Requested: 0 Critical Risks)
+        // 4. Risk (0 Critical Risks as requested)
         const riskCount = 0;
 
         return {
@@ -313,13 +313,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onTokenSelect }) => {
             case 'xrp': return 'https://cryptologos.cc/logos/xrp-xrp-logo.png';
             default: return 'https://via.placeholder.com/20';
         }
-    };
-
-    const formatCompactCurrency = (num: number) => {
-        if (Math.abs(num) >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
-        if (Math.abs(num) >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (Math.abs(num) >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return num.toFixed(0);
     };
 
     // Sort Header Component

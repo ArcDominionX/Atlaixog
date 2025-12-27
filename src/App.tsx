@@ -70,7 +70,7 @@ const App: React.FC = () => {
       case 'token-detection': return <TokenDetection token={selectedToken} onBack={() => setView('detection')} />;
       case 'virality': return <Virality />;
       case 'chatbot': return <Chatbot />;
-      case 'wallet-tracking': return <WalletTracking onTokenSelect={handleTokenSelect} />;
+      case 'wallet-tracking': return <WalletTracking />;
       case 'safe-scan': return <SafeScan />;
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;
       case 'smart-money': return <EmptyView title="Smart Money Tracking" icon={<Zap size={32} />} />;

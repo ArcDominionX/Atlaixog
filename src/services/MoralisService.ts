@@ -1,6 +1,7 @@
 
 import { APP_CONFIG } from '../config';
 
+// API Key from Config
 const MORALIS_API_KEY = APP_CONFIG.moralisKey; 
 
 interface MoralisTransfer {
@@ -8,9 +9,8 @@ interface MoralisTransfer {
     block_timestamp: string;
     to_address: string;
     from_address: string;
-    value: string; 
+    value: string; // Raw value
     decimals?: number;
-    token_symbol?: string;
 }
 
 export interface RealActivity {
@@ -23,7 +23,6 @@ export interface RealActivity {
     hash: string;
     wallet: string;
     tag: string;
-    asset?: string;
 }
 
 export interface WalletBalance {
@@ -38,7 +37,6 @@ export interface WalletBalance {
     verified_contract?: boolean;
     usd_value?: number;
     price_usd?: number;
-    chain?: string;
 }
 
 const getTimeAgo = (timestamp: string) => {
@@ -61,93 +59,21 @@ const mapChainToMoralisEVM = (chain: string) => {
     }
 };
 
-const NATIVE_TOKENS = {
-    solana: { address: 'So11111111111111111111111111111111111111112', symbol: 'SOL', name: 'Solana', decimals: 9, logo: 'https://cryptologos.cc/logos/solana-sol-logo.png' },
-    ethereum: { address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', symbol: 'ETH', name: 'Ethereum', decimals: 18, logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
-    bsc: { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', symbol: 'BNB', name: 'BNB', decimals: 18, logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png' }
-};
-
-// Robust fetcher with CORS proxy fallback
-const fetchWithFallbacks = async (url: string) => {
-    const options = {
-        headers: {
-            'accept': 'application/json',
-            'X-API-Key': MORALIS_API_KEY
-        }
-    };
-
-    try {
-        const response = await fetch(url, options);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        // Try Proxy
-        try {
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-            const proxyResponse = await fetch(proxyUrl, options);
-            if (!proxyResponse.ok) throw new Error(`Proxy HTTP ${proxyResponse.status}`);
-            return await proxyResponse.json();
-        } catch (proxyError) {
-            console.warn(`Fetch failed for ${url}`);
-            throw proxyError;
-        }
-    }
-};
-
 export const MoralisService = {
-    getWalletTokenTransfers: async (address: string, chain: string): Promise<RealActivity[]> => {
-        if (!address) return [];
-
-        const isSolana = chain.toLowerCase() === 'solana';
-        
-        let url = '';
-        if (isSolana) {
-            url = `https://solana-gateway.moralis.io/account/mainnet/${address}/transfers?limit=20`;
-        } else {
-            const hexChain = mapChainToMoralisEVM(chain);
-            url = `https://deep-index.moralis.io/api/v2.2/${address}/erc20/transfers?chain=${hexChain}&order=DESC&limit=20`;
-        }
-
-        try {
-            const data = await fetchWithFallbacks(url);
-            const transfers: any[] = isSolana ? data : (data.result || []); 
-
-            return transfers.map((tx) => {
-                const from = (tx.from_address || tx.from || '').toLowerCase();
-                const to = (tx.to_address || tx.to || '').toLowerCase();
-                const myAddr = address.toLowerCase();
-                
-                const isIncoming = to === myAddr;
-                
-                const symbol = tx.token_symbol || (isSolana ? 'SOL' : 'Token'); 
-                const decimals = parseInt(tx.decimals || (isSolana ? '9' : '18'));
-                const val = parseFloat(tx.value) / Math.pow(10, decimals);
-                
-                return {
-                    type: isIncoming ? 'Buy' : 'Sell', 
-                    val: val < 0.001 ? '< 0.001' : val.toFixed(3),
-                    asset: symbol,
-                    desc: isIncoming ? `Received ${symbol}` : `Sent ${symbol}`,
-                    time: getTimeAgo(tx.block_timestamp),
-                    color: isIncoming ? 'text-primary-green' : 'text-primary-red',
-                    usd: '', 
-                    hash: tx.transaction_hash || tx.signature, 
-                    wallet: isIncoming ? from : to,
-                    tag: 'Wallet'
-                };
-            });
-
-        } catch (error) {
-            console.error("Failed to fetch wallet history:", error);
+    /**
+     * Fetches real token transfers and categorizes them as Buys/Sells
+     * by comparing against the Liquidity Pair Address from DexScreener.
+     */
+    getTokenActivity: async (tokenAddress: string, chain: string, pairAddress: string, tokenPrice: number): Promise<RealActivity[]> => {
+        // Validate Token Address
+        if (!tokenAddress || tokenAddress.length < 20) {
+            console.warn("Invalid Token Address for Moralis");
             return [];
         }
-    },
-
-    getTokenActivity: async (tokenAddress: string, chain: string, pairAddress: string, tokenPrice: number): Promise<RealActivity[]> => {
-        if (!tokenAddress || tokenAddress.length < 20) return [];
 
         const isSolana = chain.toLowerCase() === 'solana';
         
+        // Select Endpoint
         let url = '';
         if (isSolana) {
             url = `https://solana-gateway.moralis.io/token/mainnet/${tokenAddress}/transfers?limit=50`;
@@ -157,22 +83,39 @@ export const MoralisService = {
         }
 
         try {
-            const data = await fetchWithFallbacks(url);
-            const transfers: MoralisTransfer[] = data.result || []; 
+            const response = await fetch(url, {
+                headers: {
+                    'accept': 'application/json',
+                    'X-API-Key': MORALIS_API_KEY
+                }
+            });
+
+            // Gracefully handle 404/400 without crashing
+            if (response.status === 404 || response.status === 400) {
+                console.warn(`Moralis data not found for ${tokenAddress} on ${chain}`);
+                return [];
+            }
+
+            if (!response.ok) throw new Error(`Moralis API Error: ${response.status} ${response.statusText}`);
+            
+            const data = await response.json();
+            const transfers: MoralisTransfer[] = data.result; 
 
             if (!transfers || transfers.length === 0) return [];
 
             return transfers.map((tx) => {
+                // Determine transaction type based on Pair Address
                 let type: RealActivity['type'] = 'Transfer';
                 let desc = 'Transferred';
                 let color = 'text-text-light';
                 
+                // Normalization for case-insensitive comparison
                 const from = tx.from_address.toLowerCase();
                 const to = tx.to_address.toLowerCase();
                 const pair = pairAddress ? pairAddress.toLowerCase() : '';
 
-                const isBuy = from === pair;
-                const isSell = to === pair;
+                const isBuy = from === pair; // User received token FROM pair
+                const isSell = to === pair;  // User sent token TO pair
 
                 if (isBuy && pair) {
                     type = 'Buy';
@@ -184,10 +127,12 @@ export const MoralisService = {
                     color = 'text-primary-red';
                 }
 
+                // Calculate Amount
                 const decimals = tx.decimals ? parseInt(tx.decimals.toString()) : (isSolana ? 9 : 18); 
                 const rawVal = parseFloat(tx.value) / Math.pow(10, decimals);
                 const usdVal = rawVal * tokenPrice;
 
+                // Identify Wallet Tags
                 let tag = 'Trader';
                 if (usdVal > 50000) tag = 'Whale';
                 else if (usdVal > 10000) tag = 'Smart Money';
@@ -201,7 +146,7 @@ export const MoralisService = {
                     color,
                     usd: `$${usdVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
                     hash: tx.transaction_hash,
-                    wallet: isBuy ? to : from,
+                    wallet: isBuy ? to : from, // The actor is the one NOT the pair
                     tag
                 };
             });
@@ -212,106 +157,54 @@ export const MoralisService = {
         }
     },
 
+    /**
+     * Fetches Wallet Balances for the Wallet Tracking Page
+     */
     getWalletBalances: async (address: string, chain: string): Promise<WalletBalance[]> => {
         if (!address) return [];
 
         const isSolana = chain.toLowerCase() === 'solana';
-        const hexChain = mapChainToMoralisEVM(chain);
         
-        let tokensUrl = '';
-        let nativeUrl = '';
-        let nativePriceUrl = '';
-        
-        const nativeConfig = isSolana ? NATIVE_TOKENS.solana : (chain.toLowerCase() === 'bsc' ? NATIVE_TOKENS.bsc : NATIVE_TOKENS.ethereum);
-
+        let url = '';
         if (isSolana) {
-            tokensUrl = `https://solana-gateway.moralis.io/account/mainnet/${address}/tokens`;
-            nativeUrl = `https://solana-gateway.moralis.io/account/mainnet/${address}/balance`;
-            nativePriceUrl = `https://solana-gateway.moralis.io/token/mainnet/${nativeConfig.address}/price`;
+            url = `https://solana-gateway.moralis.io/account/mainnet/${address}/tokens`;
         } else {
-            tokensUrl = `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${hexChain}&exclude_spam=true`;
-            nativeUrl = `https://deep-index.moralis.io/api/v2.2/${address}/balance?chain=${hexChain}`;
-            nativePriceUrl = `https://deep-index.moralis.io/api/v2.2/erc20/${nativeConfig.address}/price?chain=${hexChain}`;
+            const hexChain = mapChainToMoralisEVM(chain);
+            url = `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=${hexChain}&exclude_spam=true`;
         }
 
         try {
-            const [tokensRes, nativeRes, priceRes] = await Promise.allSettled([
-                fetchWithFallbacks(tokensUrl),
-                fetchWithFallbacks(nativeUrl),
-                fetchWithFallbacks(nativePriceUrl)
-            ]);
-
-            let tokensData: any = [];
-            if (tokensRes.status === 'fulfilled') {
-                tokensData = tokensRes.value;
-            }
-
-            let nativeData: any = { balance: '0', solana: '0' };
-            if (nativeRes.status === 'fulfilled') {
-                nativeData = nativeRes.value;
-            }
-
-            let priceData = { usdPrice: 0 };
-            if (priceRes.status === 'fulfilled') {
-                priceData = priceRes.value;
-            }
-
-            const rawTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
-            
-            const processedTokens: WalletBalance[] = rawTokens.map((t: any) => {
-                let dec = 18;
-                if (t.decimals !== undefined && t.decimals !== null) {
-                    dec = parseInt(t.decimals);
-                    if (isNaN(dec)) dec = 18;
+            const response = await fetch(url, {
+                headers: {
+                    'accept': 'application/json',
+                    'X-API-Key': MORALIS_API_KEY
                 }
-
-                const bal = t.balance || t.amount || '0';
-
-                return {
-                    token_address: t.token_address || t.mint, 
-                    symbol: t.symbol || 'UNK',
-                    name: t.name || 'Unknown Token',
-                    logo: t.logo || t.thumbnail,
-                    decimals: dec,
-                    balance: bal,
-                    possible_spam: t.possible_spam,
-                    verified_contract: t.verified_contract,
-                    usd_value: t.usd_value, 
-                    price_usd: t.usd_price || 0, 
-                    chain: chain 
-                };
             });
 
-            const nativeBalRaw = isSolana ? (nativeData.lamports || nativeData.solana || '0') : (nativeData.balance || '0');
-            const nativeDecimals = nativeConfig.decimals;
-            const nativeBalVal = parseFloat(nativeBalRaw) / Math.pow(10, nativeDecimals);
+            if (!response.ok) return [];
             
-            if (nativeBalVal > 0) {
-                const nativePrice = priceData.usdPrice || 0;
-                const nativeUsdValue = nativeBalVal * nativePrice;
-                
-                const nativeToken: WalletBalance = {
-                    token_address: 'NATIVE',
-                    symbol: nativeConfig.symbol,
-                    name: nativeConfig.name,
-                    logo: nativeConfig.logo,
-                    decimals: nativeDecimals,
-                    balance: nativeBalRaw,
-                    possible_spam: false,
-                    verified_contract: true,
-                    usd_value: nativeUsdValue,
-                    price_usd: nativePrice,
-                    chain: chain
-                };
-                
-                processedTokens.unshift(nativeToken);
-            }
+            // Note: Solana Endpoint response structure is slightly different (array directly) vs EVM (object with result array usually)
+            // But Moralis standardized V2.2 mostly.
+            const data = await response.json();
+            
+            // Handle differences between EVM response (paginated) and Solana (array)
+            const tokens = Array.isArray(data) ? data : (data.result || []);
 
-            return processedTokens;
+            return tokens.map((t: any) => ({
+                token_address: t.token_address || t.mint, // EVM vs Solana
+                symbol: t.symbol,
+                name: t.name,
+                logo: t.logo || t.thumbnail,
+                decimals: t.decimals,
+                balance: t.balance, // Raw balance
+                possible_spam: t.possible_spam,
+                verified_contract: t.verified_contract,
+                usd_value: t.usd_value,
+                price_usd: t.usd_price || 0
+            }));
 
         } catch (error) {
             console.error("Failed to fetch wallet balances:", error);
-            // Return empty array to trigger N/A in ChainRouter instead of crashing
             return [];
         }
     }
