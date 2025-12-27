@@ -264,8 +264,6 @@ export const MoralisService = {
             });
 
         } catch (error) {
-            // Fallback for token activity is handled in TokenDetails.tsx usually, 
-            // but we return empty here to let UI handle it.
             return [];
         }
     },

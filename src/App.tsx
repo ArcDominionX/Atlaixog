@@ -29,106 +29,31 @@ const EmptyView: React.FC<{ title: string; icon: React.ReactNode }> = ({ title, 
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('overview');
-  // viewData holds the context for the view (e.g., Token Object, Wallet Address string, etc.)
-  const [viewData, setViewData] = useState<any>(null);
+  const [selectedToken, setSelectedToken] = useState<string>('');
+  const [selectedTokenData, setSelectedTokenData] = useState<MarketCoin | string>('');
 
-  // --- BACKGROUND DATA SYNC ---
+  // --- BACKGROUND WORKER (CLIENT-SIDE BOT) ---
+  // This enables "Crowdsourced" updates. When a user is online, their browser
+  // periodically scans a small slice of the market and updates the global database.
   useEffect(() => {
+    // 1. Initial background scan
     DatabaseService.checkAndTriggerIngestion();
+
+    // 2. Periodic incremental scan every 15 seconds
     const intervalId = setInterval(() => {
         DatabaseService.checkAndTriggerIngestion();
     }, 15000);
+
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- ROUTER ENGINE ---
+  const handleLogin = () => setView('overview');
+  const handleLogout = () => setView('auth');
 
-  // 1. Function to read URL and set React State
-  const syncStateFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
-    const currentView = (params.get('view') as ViewState) || 'overview';
-    const rawData = params.get('data');
-    
-    let parsedData = null;
-    if (rawData) {
-        try {
-            // Try to parse as JSON (for objects)
-            parsedData = JSON.parse(rawData);
-        } catch {
-            // If fail, treat as simple string (e.g. 'SOL', '0x123...')
-            parsedData = rawData;
-        }
-    }
-
-    setView(currentView);
-    setViewData(parsedData);
+  const handleTokenSelect = (token: MarketCoin | string) => {
+      setSelectedTokenData(token);
+      setView('token-details');
   };
-
-  // 2. Initial Load & Listen for Browser Back/Forward
-  useEffect(() => {
-    syncStateFromUrl(); // Run once on mount
-    
-    const handlePopState = () => {
-        syncStateFromUrl(); // Run whenever history changes (Back button)
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // 3. Navigation Action (Updates URL + State)
-  const navigate = (newView: ViewState, data: any = null) => {
-    const params = new URLSearchParams();
-    
-    // Only set 'view' param if not overview (default)
-    if (newView !== 'overview') {
-        params.set('view', newView);
-    }
-    
-    // Smart URL Serialization
-    if (data) {
-        if (typeof data === 'string') {
-            params.set('data', data);
-        } else if (typeof data === 'object') {
-            // Prefer short identifiers for URL cleanliness
-            if (data.ticker) params.set('data', data.ticker);
-            else if (data.addr) params.set('data', data.addr);
-            else if (data.address) params.set('data', data.address);
-            else {
-               // Fallback: If no ID found, don't put massive object in URL. 
-               // We rely on memory state for the transition, but refresh might lose detail if not backed by ID.
-            }
-        }
-    }
-
-    // Construct new URL
-    const queryString = params.toString();
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
-
-    // Push to Browser History
-    window.history.pushState({}, '', newUrl);
-    
-    // Update React State
-    setView(newView);
-    setViewData(data);
-    
-    // Reset Scroll
-    window.scrollTo(0, 0);
-  };
-
-  // 4. Back Helper
-  const goBack = () => {
-    // Uses browser history to ensure 'Back' logic aligns with UX expectation
-    if (window.history.length > 1) {
-        window.history.back();
-    } else {
-        // Fallback if opened in new tab with no history
-        navigate('overview');
-    }
-  };
-
-  const handleLogin = () => navigate('overview');
-  const handleLogout = () => navigate('auth');
 
   if (view === 'auth') {
     return <AuthScreen onLogin={handleLogin} />;
@@ -136,54 +61,26 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
-      case 'overview': 
-        return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
-      
-      case 'token-details': 
-        return <TokenDetails token={viewData} onBack={goBack} />;
-      
+      case 'overview': return <Dashboard onTokenSelect={handleTokenSelect} />;
+      case 'token-details': return <TokenDetails token={selectedTokenData} onBack={() => setView('overview')} />;
       case 'kol-feed': return <KolFeed />;
       case 'heatmap': return <Heatmap />;
-      
-      case 'sentiment': 
-        return <Sentiment 
-            initialContract={viewData} 
-            onAnalyze={(c) => navigate('sentiment', c)} 
-            onBack={goBack} 
-        />;
-      
-      case 'detection': 
-        return <Detection onSearch={(t) => navigate('token-detection', t)} />;
-      
-      case 'token-detection': 
-        return <TokenDetection token={viewData} onBack={goBack} />;
-      
+      case 'sentiment': return <Sentiment />;
+      case 'detection': return <Detection onSearch={(t) => { setSelectedToken(t); setView('token-detection'); }} />;
+      case 'token-detection': return <TokenDetection token={selectedToken} onBack={() => setView('detection')} />;
       case 'virality': return <Virality />;
       case 'chatbot': return <Chatbot />;
-      
-      case 'wallet-tracking': 
-        return <WalletTracking 
-            initialWallet={viewData} 
-            onSelectWallet={(w) => navigate('wallet-tracking', w)} 
-            onBack={goBack}
-        />;
-      
-      case 'safe-scan': 
-        return <SafeScan 
-            initialContract={viewData} 
-            onScan={(c) => navigate('safe-scan', c)} 
-            onBack={goBack}
-        />;
-      
+      case 'wallet-tracking': return <WalletTracking />;
+      case 'safe-scan': return <SafeScan />;
       case 'custom-alerts': return <EmptyView title="Custom Alerts" icon={<AlertCircle size={32} />} />;
       case 'smart-money': return <EmptyView title="Smart Money Tracking" icon={<Zap size={32} />} />;
       case 'settings': return <EmptyView title="Settings" icon={<SettingsIcon size={32} />} />;
-      default: return <Dashboard onTokenSelect={(t) => navigate('token-details', t)} />;
+      default: return <Dashboard onTokenSelect={handleTokenSelect} />;
     }
   };
 
   return (
-    <Layout currentView={view} onViewChange={(v) => navigate(v)} onLogout={handleLogout}>
+    <Layout currentView={view} onViewChange={setView} onLogout={handleLogout}>
       {renderContent()}
     </Layout>
   );

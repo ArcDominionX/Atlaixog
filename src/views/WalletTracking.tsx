@@ -18,69 +18,63 @@ interface WalletData {
     type: string;
 }
 
-interface WalletTrackingProps {
-    initialWallet?: WalletData | string | null;
-    onSelectWallet: (wallet: WalletData) => void;
-    onBack: () => void;
-}
-
 // Helpers
 const isSolanaAddress = (addr: string) => {
     // Basic check: Solana addresses are Base58 and roughly 32-44 chars, don't start with 0x
     return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
 };
 
-export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, onSelectWallet, onBack }) => {
-    // Resolve initial prop
-    const effectiveWallet: WalletData | null = typeof initialWallet === 'string' 
-        ? { id: 0, addr: initialWallet, tag: 'Unknown', bal: 'Loading...', pnl: '0%', win: '0%', tokens: 0, time: '', type: 'smart' }
-        : (initialWallet as WalletData) || null;
-
-    const viewMode = effectiveWallet ? 'profile' : 'dashboard';
-    
-    // State
+export const WalletTracking: React.FC = () => {
+    const [viewMode, setViewMode] = useState<'dashboard' | 'profile'>('dashboard');
+    const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
     const [activeFilter, setActiveFilter] = useState<string | null>(null);
     const [walletType, setWalletType] = useState('Smart Money');
-    const [chain, setChain] = useState('Ethereum'); // Default
+    const [chain, setChain] = useState('Ethereum'); // Default to Ethereum
     const [searchQuery, setSearchQuery] = useState('');
     
+    // Router Data State
     const [loading, setLoading] = useState(false);
     const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
+
+    // Pagination States
     const [visibleCount, setVisibleCount] = useState(8);
     
-    // Chart
+    // Refs
     const netWorthChartRef = useRef<HTMLDivElement>(null);
     const chartInstance = useRef<any>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
-    // --- AUTO-DETECT CHAIN ON MOUNT & UPDATE ---
+    // --- AUTO-DETECT CHAIN ON WALLET SELECTION ---
     useEffect(() => {
-        if (effectiveWallet?.addr) {
+        if (selectedWallet?.addr) {
             // Check if it's a new address that needs chain detection
-            if (isSolanaAddress(effectiveWallet.addr)) {
+            if (isSolanaAddress(selectedWallet.addr)) {
                 setChain('Solana');
-            } else {
-                // If it's 0x... default to Ethereum, but don't override if user already selected another EVM chain
-                if (chain === 'Solana') setChain('Ethereum');
+            } else if (selectedWallet.addr.startsWith('0x')) {
+                // If it's 0x... default to Ethereum, but don't override if user already selected another EVM chain explicitly
+                if (chain === 'Solana' || chain === 'All Chains') {
+                    setChain('Ethereum');
+                }
             }
         }
-    }, [effectiveWallet?.addr]); // Only run when address changes
+    }, [selectedWallet]);
 
     const toggleFilter = (name: string) => setActiveFilter(activeFilter === name ? null : name);
     
-    // Search Logic
+    const openWallet = (w: WalletData) => { 
+        setSelectedWallet(w); 
+        setViewMode('profile'); 
+    };
+
     const handleTrack = () => {
         const input = searchQuery.trim();
         if (!input) return;
         
-        // Auto-detect chain for new searches immediately
-        const targetChain = isSolanaAddress(input) ? 'Solana' : 'Ethereum';
-        setChain(targetChain); 
-        
+        // Create wallet object (Chain detection handled by useEffect when selectedWallet updates)
         const searchedWallet: WalletData = {
             id: Date.now(),
             addr: input,
-            tag: 'New Track',
+            tag: 'User Tracked',
             bal: '...',
             pnl: '0%',
             win: '0%',
@@ -89,41 +83,55 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
             type: 'smart'
         };
         
-        // Clear search
+        openWallet(searchedWallet);
         setSearchQuery('');
-        
-        // Execute Navigation
-        onSelectWallet(searchedWallet);
     };
 
-    // Styles & Listeners
+    // Calculate fixed position styles for dropdowns
     const getDropdownStyle = (key: string) => {
         const button = buttonRefs.current[key];
         if (!button) return {};
         const rect = button.getBoundingClientRect();
-        return { position: 'fixed' as const, top: `${rect.bottom + 8}px`, left: `${rect.left}px`, zIndex: 9999, minWidth: `${rect.width}px` };
+        return {
+            position: 'fixed' as const,
+            top: `${rect.bottom + 8}px`,
+            left: `${rect.left}px`,
+            zIndex: 9999,
+            minWidth: `${rect.width}px`
+        };
     };
 
+    // Close filters on click outside or scroll
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (activeFilter) {
                 const target = event.target as Element;
-                if (!target.closest('.filter-wrapper') && !target.closest('.filter-popup')) setActiveFilter(null);
+                if (!target.closest('.filter-wrapper') && !target.closest('.filter-popup')) {
+                    setActiveFilter(null);
+                }
             }
         };
-        const handleScroll = () => { if (activeFilter) setActiveFilter(null); };
+
+        const handleScroll = () => {
+            if (activeFilter) setActiveFilter(null);
+        };
+
         document.addEventListener('mousedown', handleClickOutside);
         window.addEventListener('scroll', handleScroll, true);
-        return () => { document.removeEventListener('mousedown', handleClickOutside); window.removeEventListener('scroll', handleScroll, true); };
+        
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', handleScroll, true);
+        };
     }, [activeFilter]);
 
-    // --- FETCH DATA ---
+    // FETCH DATA USING ROUTER
     useEffect(() => {
         const fetchData = async () => {
-            if (viewMode === 'profile' && effectiveWallet) {
+            if (viewMode === 'profile' && selectedWallet) {
                 setLoading(true);
                 try {
-                    const data = await ChainRouter.fetchPortfolio(chain, effectiveWallet.addr);
+                    const data = await ChainRouter.fetchPortfolio(chain, selectedWallet.addr);
                     setPortfolioData(data);
                 } catch (e) {
                     console.error("Failed to fetch wallet data", e);
@@ -132,10 +140,11 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 }
             }
         };
-        fetchData();
-    }, [viewMode, effectiveWallet?.addr, chain]); // Re-fetch if address or chain changes
 
-    // --- CHART (Simulated History based on Real Current Value) ---
+        fetchData();
+    }, [viewMode, selectedWallet, chain]); 
+
+    // Chart Effect (Simulated History based on Real Net Worth)
     useEffect(() => {
         if (viewMode === 'profile' && netWorthChartRef.current && typeof ApexCharts !== 'undefined' && !loading && portfolioData) {
             
@@ -223,7 +232,10 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                 onKeyDown={(e) => e.key === 'Enter' && handleTrack()}
                             />
                         </div>
-                        <button className="bg-primary-green text-main px-8 rounded-lg font-bold hover:bg-primary-green-darker transition-colors whitespace-nowrap text-sm shadow-md flex items-center justify-center" onClick={handleTrack}>
+                        <button 
+                            className="bg-primary-green text-main px-8 rounded-lg font-bold hover:bg-primary-green-darker transition-colors whitespace-nowrap text-sm shadow-md flex items-center justify-center"
+                            onClick={handleTrack}
+                        >
                             Track
                         </button>
                     </div>
@@ -231,7 +243,11 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                     <div className="flex flex-col gap-2 mb-6">
                         <div className="flex gap-3 items-center overflow-x-auto custom-scrollbar pb-3 px-1">
                             <div className="filter-wrapper relative flex-shrink-0">
-                                <div className={`filter-pill ${activeFilter === 'chain' ? 'active' : ''}`} onClick={() => toggleFilter('chain')} ref={el => (buttonRefs.current['chain'] = el)}>
+                                <div 
+                                    className={`filter-pill ${activeFilter === 'chain' ? 'active' : ''}`} 
+                                    onClick={() => toggleFilter('chain')}
+                                    ref={el => (buttonRefs.current['chain'] = el)}
+                                >
                                     {chain} <ChevronDown size={14} />
                                 </div>
                                 {activeFilter === 'chain' && (
@@ -259,7 +275,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                     <div className="text-[10px] text-text-medium mb-1 font-medium uppercase tracking-wide">Total Portfolio Value</div>
                                     <div className="text-2xl font-bold">{w.bal}</div>
                                 </div>
-                                <button className="flex-1 py-2 border border-border rounded-lg text-[10px] font-bold hover:bg-card-hover hover:text-text-light transition-all uppercase tracking-wide" onClick={() => onSelectWallet(w)}>View Wallet</button>
+                                <button className="flex-1 py-2 border border-border rounded-lg text-[10px] font-bold hover:bg-card-hover hover:text-text-light transition-all uppercase tracking-wide" onClick={() => openWallet(w)}>View Wallet</button>
                             </div>
                         ))}
                     </div>
@@ -271,7 +287,10 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
     // Profile View
     return (
         <div className="flex flex-col gap-6 animate-fade-in pb-10">
-            <div className="flex items-center gap-2 text-text-medium hover:text-text-light cursor-pointer mb-2 w-fit transition-colors font-medium text-sm" onClick={onBack}>
+            <div 
+                className="flex items-center gap-2 text-text-medium hover:text-text-light cursor-pointer mb-2 w-fit transition-colors font-medium text-sm"
+                onClick={() => setViewMode('dashboard')}
+            >
                 <ArrowLeft size={18} /> Back to Dashboard
             </div>
             
@@ -280,13 +299,20 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                     <h2 className="text-xl font-bold mb-1">Wallet Tracking Dashboard</h2>
                     <p className="text-text-medium text-sm">Monitor on-chain activity of any wallet address</p>
                 </div>
+                
                 <div className="flex items-center gap-3">
-                    <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-text-medium">
+                     <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-text-medium">
                         <span className="text-[10px] uppercase font-bold tracking-wide">Network:</span>
-                        <select value={chain} onChange={(e) => setChain(e.target.value)} className="bg-transparent border-none outline-none font-bold text-text-light cursor-pointer">
-                            {['Ethereum', 'Solana', 'BSC', 'Avalanche', 'Base', 'Polygon'].map(c => <option key={c} value={c}>{c}</option>)}
+                        <select 
+                            value={chain} 
+                            onChange={(e) => setChain(e.target.value)}
+                            className="bg-transparent border-none outline-none font-bold text-text-light cursor-pointer"
+                        >
+                            {['Ethereum', 'Solana', 'BSC', 'Avalanche', 'Base', 'Polygon'].map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
                         </select>
-                    </div>
+                     </div>
                 </div>
             </div>
 
@@ -294,7 +320,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                 <div className="flex flex-col items-center justify-center min-h-[400px]">
                     <RefreshCw className="animate-spin text-primary-green mb-4" size={32} />
                     <div className="text-lg font-bold">Scanning Blockchain...</div>
-                    <div className="text-sm text-text-medium">Fetching assets from {chain}</div>
+                    <div className="text-sm text-text-medium">Fetching real-time assets from {chain}</div>
                 </div>
             ) : (
                 <>
@@ -304,7 +330,7 @@ export const WalletTracking: React.FC<WalletTrackingProps> = ({ initialWallet, o
                                 {chain[0]}
                             </div>
                             <div className="min-w-0">
-                                <div className="text-xl md:text-2xl font-bold font-mono truncate text-text-light">{effectiveWallet?.addr}</div>
+                                <div className="text-xl md:text-2xl font-bold font-mono truncate text-text-light">{selectedWallet?.addr}</div>
                                 <div className="flex gap-2 mt-1">
                                     <span className="text-xs px-2 py-0.5 rounded font-bold uppercase bg-primary-green/10 text-primary-green border border-primary-green/30">Active</span>
                                     <span className="text-xs px-2 py-0.5 rounded font-bold uppercase bg-card border border-border text-text-medium">{chain}</span>
