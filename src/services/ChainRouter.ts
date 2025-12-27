@@ -13,16 +13,28 @@ export interface PortfolioData {
         price: string;
         logo: string;
         address: string;
-        chain: string; // Added chain identifier
+        chain: string; 
     }[];
     recentActivity: RealActivity[];
-    providerUsed: 'Moralis' | 'Cache' | 'Simulated';
+    providerUsed: 'Moralis' | 'Cache';
     chainIcon: string;
     timestamp: number;
-    isSimulated?: boolean;
 }
 
-// --- PERFORMANCE ENGINE ---
+// --- HELPERS ---
+const safeFloat = (val: any): number => {
+    if (val === null || val === undefined) return 0;
+    const parsed = parseFloat(val);
+    if (isNaN(parsed) || !isFinite(parsed)) return 0;
+    return parsed;
+};
+
+const safeInt = (val: any, defaultVal = 18): number => {
+    if (val === null || val === undefined) return defaultVal;
+    const parsed = parseInt(val);
+    if (isNaN(parsed) || !isFinite(parsed)) return defaultVal;
+    return parsed;
+};
 
 class SmartCache {
     private cache = new Map<string, { data: any; expiry: number }>();
@@ -58,165 +70,237 @@ class SmartCache {
 
 const cacheManager = new SmartCache();
 
-// --- SIMULATION ENGINE (FALLBACK) ---
-const generateSimulatedData = (chain: string, address: string): PortfolioData => {
-    const isSolana = chain.toLowerCase() === 'solana';
-    const assets = [];
-    let totalUsd = 0;
+// --- PRICE ENRICHMENT ENGINES ---
 
-    if (isSolana) {
-        assets.push({ symbol: 'SOL', balance: '142.5 SOL', value: '$24,520.40', price: '$172.40', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png', address: 'So11111111111111111111111111111111111111112', chain: 'Solana' });
-        assets.push({ symbol: 'USDC', balance: '5,420 USDC', value: '$5,420.00', price: '$1.00', logo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', chain: 'Solana' });
-        assets.push({ symbol: 'BONK', balance: '15.4M BONK', value: '$420.00', price: '$0.000024', logo: 'https://cryptologos.cc/logos/bonk1-bonk-logo.png', address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', chain: 'Solana' });
-        totalUsd = 30360.40;
-    } else {
-        assets.push({ symbol: 'ETH', balance: '4.2 ETH', value: '$12,420.50', price: '$2,950.20', logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png', address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', chain: 'Ethereum' });
-        assets.push({ symbol: 'USDT', balance: '8,500 USDT', value: '$8,500.00', price: '$1.00', logo: 'https://cryptologos.cc/logos/tether-usdt-logo.png', address: '0xdac17f958d2ee523a2206206994597c13d831ec7', chain: 'Ethereum' });
-        assets.push({ symbol: 'LINK', balance: '150 LINK', value: '$2,100.00', price: '$14.00', logo: 'https://cryptologos.cc/logos/chainlink-link-logo.png', address: '0x514910771af9ca656af840dff83e8264ecf986ca', chain: 'Ethereum' });
-        totalUsd = 23020.50;
+const enrichWithJupiter = async (tokens: WalletBalance[]): Promise<Map<string, number>> => {
+    const priceMap = new Map<string, number>();
+    const targets = tokens.filter(t => 
+        (t.chain?.toLowerCase() === 'solana' || !t.chain) && 
+        t.token_address && 
+        t.token_address.length > 30 
+    );
+
+    if (targets.length === 0) return priceMap;
+
+    const chunks = [];
+    for (let i = 0; i < targets.length; i += 100) {
+        chunks.push(targets.slice(i, i + 100));
     }
 
-    const activity: RealActivity[] = [
-        { type: 'Buy', val: '10.5', asset: isSolana ? 'SOL' : 'ETH', desc: 'Bought on DEX', time: '2m ago', color: 'text-primary-green', usd: '$1,800', hash: '0x...sim1', wallet: address, tag: 'Simulation' },
-        { type: 'Sell', val: '5000', asset: isSolana ? 'USDC' : 'USDT', desc: 'Sold for Profit', time: '4h ago', color: 'text-primary-red', usd: '$5,000', hash: '0x...sim2', wallet: address, tag: 'Simulation' },
-        { type: 'Transfer', val: '500', asset: isSolana ? 'BONK' : 'LINK', desc: 'Received from CEX', time: '1d ago', color: 'text-text-light', usd: '$150', hash: '0x...sim3', wallet: address, tag: 'Simulation' }
-    ];
+    try {
+        const fetchPromises = chunks.map(chunk => {
+            const ids = chunk.map(t => t.token_address).join(',');
+            return fetch(`https://api.jup.ag/price/v2?ids=${ids}`)
+                .then(r => r.json())
+                .catch(() => ({ data: {} }));
+        });
 
-    let chainIcon = 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
-    if (isSolana) chainIcon = 'https://cryptologos.cc/logos/solana-sol-logo.png';
+        const results = await Promise.all(fetchPromises);
 
-    return {
-        netWorth: `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
-        rawNetWorth: totalUsd,
-        assets: assets,
-        recentActivity: activity,
-        providerUsed: 'Simulated',
-        chainIcon,
-        timestamp: Date.now(),
-        isSimulated: true
-    };
+        results.forEach(res => {
+            if (res && res.data) {
+                Object.keys(res.data).forEach(addr => {
+                    const priceData = res.data[addr];
+                    if (priceData && priceData.price) {
+                        priceMap.set(addr, safeFloat(priceData.price));
+                    }
+                });
+            }
+        });
+    } catch (e) {
+        console.warn("Jupiter price fetch failed:", e);
+    }
+
+    return priceMap;
 };
 
-// --- MORALIS PROVIDER INTEGRATION ---
+const enrichWithDexScreener = async (tokens: WalletBalance[]): Promise<Map<string, number>> => {
+    const priceMap = new Map<string, number>();
+    const targets = tokens.filter(t => 
+        t.token_address && 
+        t.token_address.startsWith('0x') && 
+        (!t.price_usd || t.price_usd === 0)
+    );
+
+    if (targets.length === 0) return priceMap;
+
+    const chunks = [];
+    for (let i = 0; i < targets.length; i += 30) {
+        chunks.push(targets.slice(i, i + 30));
+    }
+
+    try {
+        const fetchPromises = chunks.map(chunk => {
+            const addresses = chunk.map(t => t.token_address).join(',');
+            return fetch(`https://api.dexscreener.com/latest/dex/tokens/${addresses}`)
+                .then(r => r.json())
+                .catch(() => ({ pairs: [] }));
+        });
+
+        const results = await Promise.all(fetchPromises);
+        
+        results.forEach(data => {
+            if (data && data.pairs) {
+                data.pairs.forEach((pair: any) => {
+                    const addr = pair.baseToken.address.toLowerCase();
+                    if (!priceMap.has(addr) || (pair.liquidity?.usd > 10000)) {
+                        const p = safeFloat(pair.priceUsd);
+                        priceMap.set(addr, p);
+                        priceMap.set(pair.baseToken.address, p);
+                    }
+                });
+            }
+        });
+    } catch (e) {
+        console.warn("DexScreener price fetch failed:", e);
+    }
+
+    return priceMap;
+};
 
 const fetchFromMoralis = async (chain: string, address: string): Promise<PortfolioData> => {
-    
-    // EVM Chains for Aggregation
     const EVM_CHAINS = ['Ethereum', 'BSC', 'Base', 'Polygon', 'Avalanche'];
+    let chainIcon = 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
+    if (chain.toLowerCase() === 'solana') chainIcon = 'https://cryptologos.cc/logos/solana-sol-logo.png';
     
     try {
         let balances: WalletBalance[] = [];
         let history: RealActivity[] = [];
-        let isMultiChain = false;
 
         if (chain === 'All Chains' && address.startsWith('0x')) {
-            isMultiChain = true;
-            // 1. Fetch Balances from ALL chains in parallel
-            // We intentionally don't fail if one chain fails
             const balancePromises = EVM_CHAINS.map(async (c) => {
                 try {
                     const res = await MoralisService.getWalletBalances(address, c);
-                    // Tag each balance with its chain
-                    return res.map(b => ({ ...b, _chain: c }));
-                } catch (e) {
-                    return [];
-                }
+                    return res.map(b => ({ ...b, chain: c })); 
+                } catch (e) { return []; }
             });
-            
             const results = await Promise.all(balancePromises);
-            // Flatten
             balances = results.flat();
-
-            // 2. Fetch Activity (Limit to top 3 chains to save bandwidth or just Ethereum/BSC/Base)
-            // Fetching history for all 5 might be slow, let's do top 3 likely ones
-            const historyPromises = ['Ethereum', 'Base', 'BSC'].map(c => MoralisService.getWalletTokenTransfers(address, c));
+            
+            const historyPromises = ['Ethereum', 'Base'].map(c => MoralisService.getWalletTokenTransfers(address, c));
             const historyResults = await Promise.all(historyPromises);
-            history = historyResults.flat().sort((a, b) => {
-                // Approximate sort if time format is standardized, otherwise just concat
-                return 0; 
-            });
+            history = historyResults.flat();
 
         } else {
-            // Single Chain Fetch
             const balancesPromise = MoralisService.getWalletBalances(address, chain);
             const historyPromise = MoralisService.getWalletTokenTransfers(address, chain);
             [balances, history] = await Promise.all([balancesPromise, historyPromise]);
-            
-            // Tag logic for single chain
-            balances = balances.map(b => ({ ...b, _chain: chain }));
+            balances = balances.map(b => ({ ...b, chain: chain }));
         }
         
-        // --- FALLBACK TRIGGER ---
+        // STRICT MODE: NO SIMULATION. Return empty if nothing found.
         if ((!balances || balances.length === 0) && (!history || history.length === 0)) {
-            console.warn("Wallet empty or API limit reached. Switching to Simulation Mode.");
-            return generateSimulatedData(chain === 'All Chains' ? 'Ethereum' : chain, address);
+            return {
+                netWorth: 'N/A',
+                rawNetWorth: 0,
+                assets: [],
+                recentActivity: [],
+                providerUsed: 'Moralis',
+                chainIcon,
+                timestamp: Date.now()
+            };
         }
-        
-        let totalUsd = 0;
-        const assets = balances.map((b: any) => {
-            // Robust parsing
-            const decimals = parseInt(b.decimals) || 18;
-            const rawBalance = b.balance || '0';
-            let bal = 0;
-            try {
-                bal = parseFloat(rawBalance) / Math.pow(10, decimals);
-            } catch (e) { bal = 0; }
 
-            // Price & Value Calculation
-            let value = 0;
+        let solanaPrices = new Map<string, number>();
+        let evmPrices = new Map<string, number>();
+
+        const solanaTokens = balances.filter(b => b.chain?.toLowerCase() === 'solana' || (!b.chain && !b.token_address.startsWith('0x')));
+        const evmTokens = balances.filter(b => b.token_address.startsWith('0x'));
+
+        const [solPrices, dexPrices] = await Promise.all([
+            enrichWithJupiter(solanaTokens),
+            enrichWithDexScreener(evmTokens)
+        ]);
+        
+        solanaPrices = solPrices;
+        evmPrices = dexPrices;
+
+        let totalUsd = 0;
+        
+        const assets = balances.map((b: any) => {
+            const decimals = safeInt(b.decimals, 18);
+            const rawBalanceStr = b.balance || b.amount || '0';
+            let bal = 0;
+            const parsedRaw = parseFloat(rawBalanceStr);
+            if (!isNaN(parsedRaw) && isFinite(parsedRaw)) {
+                bal = parsedRaw / Math.pow(10, decimals);
+            }
+            if (!isFinite(bal) || bal > 1e15) bal = 0;
+
+            // --- PRICING ENGINE ---
             let price = 0;
             
-            if (b.usd_value) {
-                // Moralis often provides pre-calculated USD value
-                value = parseFloat(b.usd_value);
-                if (bal > 0) price = value / bal;
-            } else if (b.price_usd) {
-                // If only price per token is available
-                price = parseFloat(b.price_usd);
-                value = bal * price;
+            // 1. Prefer Moralis if reliable
+            if (b.price_usd && b.price_usd > 0) {
+                price = safeFloat(b.price_usd);
+            } 
+            // 2. Fallback to Jupiter (Solana)
+            else if (solanaPrices.has(b.token_address)) {
+                price = solanaPrices.get(b.token_address) || 0;
             }
-            
-            // Safety Check
-            if (isNaN(value)) value = 0;
-            if (isNaN(price)) price = 0;
+            // 3. Fallback to DexScreener (EVM)
+            else if (evmPrices.has(b.token_address) || evmPrices.has(b.token_address.toLowerCase())) {
+                price = evmPrices.get(b.token_address) || evmPrices.get(b.token_address.toLowerCase()) || 0;
+            }
+            // 4. Last resort: implied value
+            else if (b.usd_value && b.usd_value > 0 && bal > 0) {
+                price = safeFloat(b.usd_value) / bal;
+            }
+
+            // --- VALUE CALCULATION ---
+            let value = bal * price;
+            if (isNaN(value) || !isFinite(value)) value = 0;
             
             totalUsd += value;
 
+            // Strict display logic: "N/A" if price/value missing
+            const priceStr = price > 0 ? `$${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6})}` : 'N/A';
+            const valueStr = price > 0 ? `$${value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A';
+
             return {
-                symbol: b.symbol,
+                symbol: b.symbol || 'UNK',
                 balance: `${bal.toLocaleString(undefined, {maximumFractionDigits: 4})} ${b.symbol}`,
-                value: `$${value.toLocaleString(undefined, {maximumFractionDigits: 2})}`,
-                price: `$${price.toLocaleString(undefined, {maximumFractionDigits: 4})}`,
+                value: valueStr,
+                price: priceStr,
                 logo: b.logo || `https://ui-avatars.com/api/?name=${b.symbol}&background=random`,
                 address: b.token_address,
-                chain: b._chain // Internal tag
+                chain: b.chain,
+                rawValue: value
             };
-        }).sort((a, b) => parseFloat(b.value.replace('$','').replace(',','')) - parseFloat(a.value.replace('$','').replace(',','')));
+        })
+        .filter(a => a.rawValue > 0 || (a.balance !== '0' && a.balance.includes(' '))) 
+        .sort((a, b) => b.rawValue - a.rawValue);
 
-        // Determine Chain Icon
-        let chainIcon = 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
-        if (chain.toLowerCase() === 'solana') chainIcon = 'https://cryptologos.cc/logos/solana-sol-logo.png';
-        if (chain === 'All Chains') chainIcon = 'https://cryptologos.cc/logos/ethereum-eth-logo.png'; // Use Eth as generic for now, or a globe icon in UI
+        
+        const cleanAssets = assets.map(({rawValue, ...rest}) => rest);
 
         return {
-            netWorth: `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
+            netWorth: totalUsd > 0 ? `$${totalUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A',
             rawNetWorth: totalUsd,
             providerUsed: 'Moralis',
             timestamp: Date.now(),
             chainIcon: chainIcon,
-            assets: assets,
-            recentActivity: history
+            assets: cleanAssets,
+            recentActivity: history.sort((a, b) => 0) 
         };
 
     } catch (e) {
-        console.error("API Error, returning simulated data:", e);
-        return generateSimulatedData(chain, address);
+        console.error("API Error, returning N/A state:", e);
+        // STRICT MODE: NO SIMULATION. Return N/A.
+        return {
+            netWorth: 'N/A',
+            rawNetWorth: 0,
+            assets: [],
+            recentActivity: [],
+            providerUsed: 'Moralis',
+            chainIcon: chainIcon,
+            timestamp: Date.now()
+        };
     }
 };
 
 export const ChainRouter = {
     fetchPortfolio: async (chain: string, address: string): Promise<PortfolioData> => {
-        // Normalize key for caching
         const normalizedChain = chain.toLowerCase();
         const requestKey = `moralis_${normalizedChain}_${address}`;
 

@@ -1,7 +1,6 @@
 
 import { APP_CONFIG } from '../config';
 
-// API Key from Config
 const MORALIS_API_KEY = APP_CONFIG.moralisKey; 
 
 interface MoralisTransfer {
@@ -9,7 +8,7 @@ interface MoralisTransfer {
     block_timestamp: string;
     to_address: string;
     from_address: string;
-    value: string; // Raw value
+    value: string; 
     decimals?: number;
     token_symbol?: string;
 }
@@ -39,6 +38,7 @@ export interface WalletBalance {
     verified_contract?: boolean;
     usd_value?: number;
     price_usd?: number;
+    chain?: string;
 }
 
 const getTimeAgo = (timestamp: string) => {
@@ -67,10 +67,34 @@ const NATIVE_TOKENS = {
     bsc: { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', symbol: 'BNB', name: 'BNB', decimals: 18, logo: 'https://cryptologos.cc/logos/bnb-bnb-logo.png' }
 };
 
+// Robust fetcher with CORS proxy fallback
+const fetchWithFallbacks = async (url: string) => {
+    const options = {
+        headers: {
+            'accept': 'application/json',
+            'X-API-Key': MORALIS_API_KEY
+        }
+    };
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        // Try Proxy
+        try {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            const proxyResponse = await fetch(proxyUrl, options);
+            if (!proxyResponse.ok) throw new Error(`Proxy HTTP ${proxyResponse.status}`);
+            return await proxyResponse.json();
+        } catch (proxyError) {
+            console.warn(`Fetch failed for ${url}`);
+            throw proxyError;
+        }
+    }
+};
+
 export const MoralisService = {
-    /**
-     * Fetches real token transfers for a specific wallet
-     */
     getWalletTokenTransfers: async (address: string, chain: string): Promise<RealActivity[]> => {
         if (!address) return [];
 
@@ -85,16 +109,7 @@ export const MoralisService = {
         }
 
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'accept': 'application/json',
-                    'X-API-Key': MORALIS_API_KEY
-                }
-            });
-
-            if (!response.ok) return [];
-            
-            const data = await response.json();
+            const data = await fetchWithFallbacks(url);
             const transfers: any[] = isSolana ? data : (data.result || []); 
 
             return transfers.map((tx) => {
@@ -104,7 +119,7 @@ export const MoralisService = {
                 
                 const isIncoming = to === myAddr;
                 
-                const symbol = tx.token_symbol || (isSolana ? 'SOL' : 'Token'); // Fallback for Sol transfers
+                const symbol = tx.token_symbol || (isSolana ? 'SOL' : 'Token'); 
                 const decimals = parseInt(tx.decimals || (isSolana ? '9' : '18'));
                 const val = parseFloat(tx.value) / Math.pow(10, decimals);
                 
@@ -128,10 +143,6 @@ export const MoralisService = {
         }
     },
 
-    /**
-     * Fetches real token transfers and categorizes them as Buys/Sells
-     * by comparing against the Liquidity Pair Address from DexScreener.
-     */
     getTokenActivity: async (tokenAddress: string, chain: string, pairAddress: string, tokenPrice: number): Promise<RealActivity[]> => {
         if (!tokenAddress || tokenAddress.length < 20) return [];
 
@@ -146,18 +157,8 @@ export const MoralisService = {
         }
 
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'accept': 'application/json',
-                    'X-API-Key': MORALIS_API_KEY
-                }
-            });
-
-            if (response.status === 404 || response.status === 400) return [];
-            if (!response.ok) throw new Error(`Moralis API Error: ${response.status}`);
-            
-            const data = await response.json();
-            const transfers: MoralisTransfer[] = data.result; 
+            const data = await fetchWithFallbacks(url);
+            const transfers: MoralisTransfer[] = data.result || []; 
 
             if (!transfers || transfers.length === 0) return [];
 
@@ -211,16 +212,12 @@ export const MoralisService = {
         }
     },
 
-    /**
-     * Fetches Wallet Balances (Tokens + Native)
-     */
     getWalletBalances: async (address: string, chain: string): Promise<WalletBalance[]> => {
         if (!address) return [];
 
         const isSolana = chain.toLowerCase() === 'solana';
         const hexChain = mapChainToMoralisEVM(chain);
         
-        // 1. URLs for Tokens and Native Balance
         let tokensUrl = '';
         let nativeUrl = '';
         let nativePriceUrl = '';
@@ -238,50 +235,57 @@ export const MoralisService = {
         }
 
         try {
-            // Parallel Fetch - Use Promise.allSettled to ensure price failure doesn't block tokens
             const [tokensRes, nativeRes, priceRes] = await Promise.allSettled([
-                fetch(tokensUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } }),
-                fetch(nativeUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } }),
-                fetch(nativePriceUrl, { headers: { 'accept': 'application/json', 'X-API-Key': MORALIS_API_KEY } })
+                fetchWithFallbacks(tokensUrl),
+                fetchWithFallbacks(nativeUrl),
+                fetchWithFallbacks(nativePriceUrl)
             ]);
 
             let tokensData: any = [];
-            if (tokensRes.status === 'fulfilled' && tokensRes.value.ok) {
-                tokensData = await tokensRes.value.json();
+            if (tokensRes.status === 'fulfilled') {
+                tokensData = tokensRes.value;
             }
 
             let nativeData: any = { balance: '0', solana: '0' };
-            if (nativeRes.status === 'fulfilled' && nativeRes.value.ok) {
-                nativeData = await nativeRes.value.json();
+            if (nativeRes.status === 'fulfilled') {
+                nativeData = nativeRes.value;
             }
 
             let priceData = { usdPrice: 0 };
-            if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
-                priceData = await priceRes.value.json();
+            if (priceRes.status === 'fulfilled') {
+                priceData = priceRes.value;
             }
 
-            // Process Tokens
             const rawTokens = Array.isArray(tokensData) ? tokensData : (tokensData.result || []);
             
-            const processedTokens: WalletBalance[] = rawTokens.map((t: any) => ({
-                token_address: t.token_address || t.mint,
-                symbol: t.symbol,
-                name: t.name,
-                logo: t.logo || t.thumbnail,
-                decimals: t.decimals,
-                balance: t.balance,
-                possible_spam: t.possible_spam,
-                verified_contract: t.verified_contract,
-                usd_value: t.usd_value,
-                price_usd: t.usd_price || 0
-            }));
+            const processedTokens: WalletBalance[] = rawTokens.map((t: any) => {
+                let dec = 18;
+                if (t.decimals !== undefined && t.decimals !== null) {
+                    dec = parseInt(t.decimals);
+                    if (isNaN(dec)) dec = 18;
+                }
 
-            // Process Native Balance
+                const bal = t.balance || t.amount || '0';
+
+                return {
+                    token_address: t.token_address || t.mint, 
+                    symbol: t.symbol || 'UNK',
+                    name: t.name || 'Unknown Token',
+                    logo: t.logo || t.thumbnail,
+                    decimals: dec,
+                    balance: bal,
+                    possible_spam: t.possible_spam,
+                    verified_contract: t.verified_contract,
+                    usd_value: t.usd_value, 
+                    price_usd: t.usd_price || 0, 
+                    chain: chain 
+                };
+            });
+
             const nativeBalRaw = isSolana ? (nativeData.lamports || nativeData.solana || '0') : (nativeData.balance || '0');
             const nativeDecimals = nativeConfig.decimals;
             const nativeBalVal = parseFloat(nativeBalRaw) / Math.pow(10, nativeDecimals);
             
-            // Only add native token if balance > 0
             if (nativeBalVal > 0) {
                 const nativePrice = priceData.usdPrice || 0;
                 const nativeUsdValue = nativeBalVal * nativePrice;
@@ -296,10 +300,10 @@ export const MoralisService = {
                     possible_spam: false,
                     verified_contract: true,
                     usd_value: nativeUsdValue,
-                    price_usd: nativePrice
+                    price_usd: nativePrice,
+                    chain: chain
                 };
                 
-                // Add native token to start of list
                 processedTokens.unshift(nativeToken);
             }
 
@@ -307,6 +311,7 @@ export const MoralisService = {
 
         } catch (error) {
             console.error("Failed to fetch wallet balances:", error);
+            // Return empty array to trigger N/A in ChainRouter instead of crashing
             return [];
         }
     }
