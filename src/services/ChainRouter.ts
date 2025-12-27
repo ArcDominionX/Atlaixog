@@ -66,7 +66,6 @@ const fetchFromMoralis = async (chain: string, address: string): Promise<Portfol
     const balances: WalletBalance[] = await MoralisService.getWalletBalances(address, chain);
     
     // 2. Fetch Real Activity
-    // Uses the MoralisService which handles API calls or falls back to simulation if key is invalid
     const history: RealActivity[] = await MoralisService.getWalletTokenTransfers(address, chain);
     
     let totalUsd = 0;
